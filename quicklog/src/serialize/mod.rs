@@ -128,6 +128,67 @@ gen_serialize!(u64);
 gen_serialize!(u128);
 gen_serialize!(usize);
 
+/// Generates a `Serialize` implementation for unit enums.
+///
+/// This macro creates a `Serialize` implementation for enums with unit variants
+/// (no associated data). It serializes the enum by converting its discriminant
+/// to a `usize` value and encoding it as little-endian bytes.
+///
+/// The enum must have `#[repr(usize)]` to ensure consistent discriminant values.
+///
+/// # Examples
+///
+/// ```rust
+/// use quicklog::gen_serialize_enum;
+///
+/// #[repr(usize)]
+/// #[derive(Clone, Copy)]
+/// enum Color {
+///     Red = 0,
+///     Green = 1,
+///     Blue = 2,
+/// }
+///
+/// gen_serialize_enum!(Color, Red, Green, Blue);
+/// ```
+///
+/// The macro takes the enum type as the first argument, followed by all
+/// its variant names. This is necessary to generate the string representation
+/// for the `decode` function.
+#[macro_export]
+macro_rules! gen_serialize_enum {
+    ($enum_type:ty, $($variant:ident),+) => {
+        impl Serialize for $enum_type {
+            fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
+                let discriminant = *self as usize;
+                let size = self.buffer_size_required();
+                let (x, rest) = write_buf.split_at_mut(size);
+                x.copy_from_slice(&discriminant.to_le_bytes());
+
+                ($crate::serialize::Store::new(Self::decode, x), rest)
+            }
+
+            fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+                let (chunk, rest) = read_buf.split_at(std::mem::size_of::<usize>());
+                let discriminant = usize::from_le_bytes(chunk.try_into().unwrap());
+
+                let variant_name = match discriminant {
+                    $(
+                        x if x == <$enum_type>::$variant as usize => stringify!($variant),
+                    )+
+                    _ => "UnknownVariant",
+                };
+
+                (variant_name.to_string(), rest)
+            }
+
+            fn buffer_size_required(&self) -> usize {
+                std::mem::size_of::<usize>()
+            }
+        }
+    };
+}
+
 impl Serialize for &str {
     fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
         let str_len = self.len();
@@ -170,6 +231,7 @@ pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store,
 
 #[cfg(test)]
 mod tests {
+    use crate::gen_serialize_enum;
     use crate::serialize::encode_debug;
 
     use super::Serialize;
@@ -236,5 +298,149 @@ mod tests {
         let (store, _) = encode_debug(&s, &mut buf);
 
         assert_eq!(format!("{:?}", s), format!("{}", store))
+    }
+
+    #[test]
+    fn serialize_unit_enum() {
+        #[repr(usize)]
+        #[derive(Clone, Copy, PartialEq, Debug)]
+        enum Color {
+            Red = 0,
+            Green = 1,
+            Blue = 2,
+        }
+
+        gen_serialize_enum!(Color, Red, Green, Blue);
+
+        let mut buf = [0; 32];
+
+        // Test Red variant
+        let red = Color::Red;
+        let (red_store, remaining) = red.encode(&mut buf);
+        assert_eq!(red_store.as_string(), "Red");
+
+        // Test Green variant
+        let green = Color::Green;
+        let (green_store, remaining) = green.encode(remaining);
+        assert_eq!(green_store.as_string(), "Green");
+
+        // Test Blue variant
+        let blue = Color::Blue;
+        let (blue_store, _) = blue.encode(remaining);
+        assert_eq!(blue_store.as_string(), "Blue");
+    }
+
+    #[test]
+    fn serialize_enum_with_explicit_discriminants() {
+        #[repr(usize)]
+        #[derive(Clone, Copy, PartialEq, Debug)]
+        enum Status {
+            Inactive = 10,
+            Active = 20,
+            Suspended = 30,
+        }
+
+        gen_serialize_enum!(Status, Inactive, Active, Suspended);
+
+        let mut buf = [0; 32];
+
+        let active = Status::Active;
+        let (store, _) = active.encode(&mut buf);
+        assert_eq!(store.as_string(), "Active");
+
+        // Verify buffer size requirement
+        assert_eq!(active.buffer_size_required(), std::mem::size_of::<usize>());
+    }
+
+    #[test]
+    fn serialize_multiple_enums() {
+        #[repr(usize)]
+        #[derive(Clone, Copy, PartialEq, Debug)]
+        enum Priority {
+            Low = 0,
+            Medium = 1,
+            High = 2,
+        }
+
+        gen_serialize_enum!(Priority, Low, Medium, High);
+
+        let mut buf = [0; 64];
+        let low = Priority::Low;
+        let medium = Priority::Medium;
+        let high = Priority::High;
+
+        let (low_store, chunk) = low.encode(&mut buf);
+        let (medium_store, chunk) = medium.encode(chunk);
+        let (high_store, _) = high.encode(chunk);
+
+        assert_eq!(
+            format!("{} {} {}", low_store, medium_store, high_store),
+            "Low Medium High"
+        );
+    }
+
+    #[test]
+    fn serialize_enum_roundtrip() {
+        #[repr(usize)]
+        #[derive(Clone, Copy, PartialEq, Debug)]
+        enum Direction {
+            North = 0,
+            East = 1,
+            South = 2,
+            West = 3,
+        }
+
+        gen_serialize_enum!(Direction, North, East, South, West);
+
+        let original = Direction::South;
+        let mut buf = [0; 16];
+
+        // Encode
+        let (store, _) = original.encode(&mut buf);
+
+        // Verify the encoded representation can be decoded back to string
+        let decoded_string = store.as_string();
+        assert_eq!(decoded_string, "South");
+
+        // Verify the discriminant matches
+        let discriminant = original as usize;
+        let expected_bytes = discriminant.to_le_bytes();
+        assert_eq!(&buf[0..std::mem::size_of::<usize>()], &expected_bytes);
+    }
+
+    #[test]
+    fn serialize_level_enum() {
+        // Test with existing Level enum from crate::level
+        use crate::level::Level;
+
+        gen_serialize_enum!(Level, Trace, Debug, Info, Warn, Error);
+
+        let mut buf = [0; 64];
+
+        // Test all levels
+        let trace = Level::Trace;
+        let debug = Level::Debug;
+        let info = Level::Info;
+        let warn = Level::Warn;
+        let error = Level::Error;
+
+        let (trace_store, remaining) = trace.encode(&mut buf);
+        let (debug_store, remaining) = debug.encode(remaining);
+        let (info_store, remaining) = info.encode(remaining);
+        let (warn_store, remaining) = warn.encode(remaining);
+        let (error_store, _) = error.encode(remaining);
+
+        assert_eq!(trace_store.as_string(), "Trace");
+        assert_eq!(debug_store.as_string(), "Debug");
+        assert_eq!(info_store.as_string(), "Info");
+        assert_eq!(warn_store.as_string(), "Warn");
+        assert_eq!(error_store.as_string(), "Error");
+
+        // Verify discriminant values match Level enum representation
+        assert_eq!(Level::Trace as usize, 0);
+        assert_eq!(Level::Debug as usize, 1);
+        assert_eq!(Level::Info as usize, 2);
+        assert_eq!(Level::Warn as usize, 3);
+        assert_eq!(Level::Error as usize, 4);
     }
 }
