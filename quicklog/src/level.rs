@@ -27,7 +27,7 @@
 //! [`Level`]: crate::level::Level
 //! [`LevelFilter`]: crate::level::LevelFilter
 
-#[repr(usize)]
+#[repr(u8)]
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
 pub enum Level {
     /// Designates trace information, which is of very low priority
@@ -63,7 +63,7 @@ impl std::fmt::Debug for Level {
 
 /// `LevelFilter` represents the different [`Level`] of logging we have,
 /// with the addition of `Off`.
-#[repr(usize)]
+#[repr(u8)]
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd)]
 #[doc(hidden)]
 pub enum LevelFilter {

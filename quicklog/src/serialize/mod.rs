@@ -131,16 +131,17 @@ gen_serialize!(usize);
 ///
 /// This macro creates a `Serialize` implementation for enums with unit variants
 /// (no associated data). It serializes the enum by converting its discriminant
-/// to a `usize` value and encoding it as little-endian bytes.
+/// to a `u8` value and encoding it as a single byte.
 ///
-/// The enum must have `#[repr(usize)]` to ensure consistent discriminant values.
+/// The enum must have `#[repr(u8)]` to ensure consistent discriminant values
+/// and must have no more than 256 variants (0-255).
 ///
 /// # Examples
 ///
 /// ```rust
 /// use quicklog::gen_serialize_enum;
 ///
-/// #[repr(usize)]
+/// #[repr(u8)]
 /// #[derive(Clone, Copy)]
 /// enum Color {
 ///     Red = 0,
@@ -159,7 +160,7 @@ macro_rules! gen_serialize_enum {
     ($enum_type:ty, $($variant:ident),+) => {
         impl $crate::serialize::Serialize for $enum_type {
             fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
-                let discriminant = *self as usize;
+                let discriminant = *self as u8;
                 let size = self.buffer_size_required();
                 let (x, rest) = write_buf.split_at_mut(size);
                 x.copy_from_slice(&discriminant.to_le_bytes());
@@ -168,12 +169,12 @@ macro_rules! gen_serialize_enum {
             }
 
             fn decode(read_buf: &[u8]) -> (String, &[u8]) {
-                let (chunk, rest) = read_buf.split_at(std::mem::size_of::<usize>());
-                let discriminant = usize::from_le_bytes(chunk.try_into().unwrap());
+                let (chunk, rest) = read_buf.split_at(std::mem::size_of::<u8>());
+                let discriminant = u8::from_le_bytes(chunk.try_into().unwrap());
 
                 let variant_name = match discriminant {
                     $(
-                        x if x == <$enum_type>::$variant as usize => stringify!($variant),
+                        x if x == <$enum_type>::$variant as u8 => stringify!($variant),
                     )+
                     _ => "UnknownVariant",
                 };
@@ -182,7 +183,7 @@ macro_rules! gen_serialize_enum {
             }
 
             fn buffer_size_required(&self) -> usize {
-                std::mem::size_of::<usize>()
+                std::mem::size_of::<u8>()
             }
         }
     };
@@ -301,7 +302,7 @@ mod tests {
 
     #[test]
     fn serialize_unit_enum() {
-        #[repr(usize)]
+        #[repr(u8)]
         #[derive(Clone, Copy, PartialEq, Debug)]
         enum Color {
             Red = 0,
@@ -331,7 +332,7 @@ mod tests {
 
     #[test]
     fn serialize_enum_with_explicit_discriminants() {
-        #[repr(usize)]
+        #[repr(u8)]
         #[derive(Clone, Copy, PartialEq, Debug)]
         enum Status {
             Inactive = 10,
@@ -348,12 +349,12 @@ mod tests {
         assert_eq!(store.as_string(), "Active");
 
         // Verify buffer size requirement
-        assert_eq!(active.buffer_size_required(), std::mem::size_of::<usize>());
+        assert_eq!(active.buffer_size_required(), std::mem::size_of::<u8>());
     }
 
     #[test]
     fn serialize_multiple_enums() {
-        #[repr(usize)]
+        #[repr(u8)]
         #[derive(Clone, Copy, PartialEq, Debug)]
         enum Priority {
             Low = 0,
@@ -380,7 +381,7 @@ mod tests {
 
     #[test]
     fn serialize_enum_roundtrip() {
-        #[repr(usize)]
+        #[repr(u8)]
         #[derive(Clone, Copy, PartialEq, Debug)]
         enum Direction {
             North = 0,
@@ -402,9 +403,9 @@ mod tests {
         assert_eq!(decoded_string, "South");
 
         // Verify the discriminant matches
-        let discriminant = original as usize;
+        let discriminant = original as u8;
         let expected_bytes = discriminant.to_le_bytes();
-        assert_eq!(&buf[0..std::mem::size_of::<usize>()], &expected_bytes);
+        assert_eq!(&buf[0..std::mem::size_of::<u8>()], &expected_bytes);
     }
 
     #[test]
@@ -436,10 +437,10 @@ mod tests {
         assert_eq!(error_store.as_string(), "Error");
 
         // Verify discriminant values match Level enum representation
-        assert_eq!(Level::Trace as usize, 0);
-        assert_eq!(Level::Debug as usize, 1);
-        assert_eq!(Level::Info as usize, 2);
-        assert_eq!(Level::Warn as usize, 3);
-        assert_eq!(Level::Error as usize, 4);
+        assert_eq!(Level::Trace as u8, 0);
+        assert_eq!(Level::Debug as u8, 1);
+        assert_eq!(Level::Info as u8, 2);
+        assert_eq!(Level::Warn as u8, 3);
+        assert_eq!(Level::Error as u8, 4);
     }
 }
