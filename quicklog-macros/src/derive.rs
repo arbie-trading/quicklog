@@ -65,9 +65,18 @@ pub(crate) fn derive(input: TokenStream) -> TokenStream {
         return quote! {}.into();
     }
 
-    let field_names: Vec<_> = fields
+    // Handle both named fields (regular structs) and unnamed fields (tuple structs)
+    let field_accessors: Vec<_> = fields
         .iter()
-        .filter_map(|field| field.ident.as_ref())
+        .enumerate()
+        .map(|(i, field)| {
+            if let Some(name) = &field.ident {
+                quote! { #name } // Named field: self.field_name
+            } else {
+                let index = syn::Index::from(i);
+                quote! { #index } // Unnamed field: self.0, self.1, etc.
+            }
+        })
         .collect();
 
     // If we have > 1 field, then we split once at the top-level to get the
@@ -78,24 +87,24 @@ pub(crate) fn derive(input: TokenStream) -> TokenStream {
     // directly read off the main `write_buf` chunk and return the remainder
     // unread.
     let (initial_chunk_split, chunk_encode_and_store): (TokenStream2, TokenStream2) =
-        if field_names.len() > 1 {
+        if field_accessors.len() > 1 {
             // Split off just large enough chunk to be kept in final Store
             let initial_split = quote! {
                 let (chunk, rest) = write_buf.split_at_mut(self.buffer_size_required());
             };
 
             // Sequentially encode
-            let encode: Vec<_> = field_names
+            let encode: Vec<_> = field_accessors
                 .iter()
                 .enumerate()
-                .map(|(idx, name)| {
+                .map(|(idx, accessor)| {
                     if idx == 0 {
                         quote! {
-                            let (_, chunk_rest) = self.#name.encode(chunk);
+                            let (_, chunk_rest) = self.#accessor.encode(chunk);
                         }
                     } else {
                         quote! {
-                            let (_, chunk_rest) = self.#name.encode(chunk_rest);
+                            let (_, chunk_rest) = self.#accessor.encode(chunk_rest);
                         }
                     }
                 })
@@ -115,9 +124,9 @@ pub(crate) fn derive(input: TokenStream) -> TokenStream {
             };
 
             // Only one field, so can directly encode in main chunk
-            let field_name = &field_names[0];
+            let field_accessor = &field_accessors[0];
             let encode_and_store = quote! {
-                self.#field_name.encode(chunk)
+                self.#field_accessor.encode(chunk)
             };
 
             (initial_split, encode_and_store)
@@ -125,20 +134,41 @@ pub(crate) fn derive(input: TokenStream) -> TokenStream {
 
     // Combine decode implementations from all field types
     let field_tys: Vec<_> = fields
-        .iter()
-        .map(|field| {
-            // Unwrap: safe since we checked that this macro is only for structs
-            // which always have named fields
-            let field_name = field.ident.as_ref().unwrap();
-            let mut field_ty = field.ty.clone();
-            if let Type::Reference(ty_ref) = &mut field_ty {
-                _ = ty_ref.lifetime.take();
-                _ = ty_ref.mutability.take();
-            }
-            let decoded_ident = Ident::new(format!("{}", field_name).as_str(), field_name.span());
+         .iter()
+         .enumerate()
+         .map(|(i, field)| {
+             let mut field_ty = field.ty.clone();
+             if let Type::Reference(ty_ref) = &mut field_ty {
+                 _ = ty_ref.lifetime.take();
+                 _ = ty_ref.mutability.take();
+             }
 
-            quote! {
-                let (#decoded_ident, read_buf) = <#field_ty as quicklog::serialize::Serialize>::decode(read_buf);
+             // Create a unique variable name for each decoded field
+             let decoded_ident = if let Some(name) = &field.ident {
+                 // Named field: use the field name
+                 Ident::new(&format!("{}", name), name.span())
+             } else {
+                 // Unnamed field: use field_0, field_1, etc.
+                 Ident::new(&format!("field_{}", i), proc_macro2::Span::call_site())
+             };
+
+             quote! {
+                 let (#decoded_ident, read_buf) = <#field_ty as quicklog::serialize::Serialize>::decode(read_buf);
+             }
+         })
+         .collect();
+
+    // Create variable names for the format string
+    let decode_var_names: Vec<_> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            if let Some(name) = &field.ident {
+                // Named field: use the field name
+                Ident::new(&format!("{}", name), name.span())
+            } else {
+                // Unnamed field: use field_0, field_1, etc.
+                Ident::new(&format!("field_{}", i), proc_macro2::Span::call_site())
             }
         })
         .collect();
@@ -152,25 +182,25 @@ pub(crate) fn derive(input: TokenStream) -> TokenStream {
     let decode_fmt_str = decode_fmt_str.trim_end();
 
     quote! {
-        impl #impl_generics quicklog::serialize::Serialize for #struct_name #ty_generics #where_clause {
-            fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (quicklog::serialize::Store<'buf>, &'buf mut [u8]) {
-                // Perform initial split to get combined byte buffer that will be
-                // sufficient for all fields to be encoded in
-                #initial_chunk_split
+         impl #impl_generics quicklog::serialize::Serialize for #struct_name #ty_generics #where_clause {
+             fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (quicklog::serialize::Store<'buf>, &'buf mut [u8]) {
+                 // Perform initial split to get combined byte buffer that will be
+                 // sufficient for all fields to be encoded in
+                 #initial_chunk_split
 
-                #chunk_encode_and_store
-            }
+                 #chunk_encode_and_store
+             }
 
-            fn decode(read_buf: &[u8]) -> (String, &[u8]) {
-                #(#field_tys)*
+             fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+                 #(#field_tys)*
 
-                (format!(#decode_fmt_str, #(#field_names),*), read_buf)
-            }
+                 (format!(#decode_fmt_str, #(#decode_var_names),*), read_buf)
+             }
 
-            fn buffer_size_required(&self) -> usize {
-                #(self.#field_names.buffer_size_required())+*
-            }
-        }
-    }
-    .into()
+             fn buffer_size_required(&self) -> usize {
+                 #(self.#field_accessors.buffer_size_required())+*
+             }
+         }
+     }
+     .into()
 }
