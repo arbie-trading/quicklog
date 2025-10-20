@@ -92,6 +92,7 @@ impl Display for Store<'_> {
     }
 }
 
+#[macro_export]
 macro_rules! gen_serialize {
     ($primitive:ty) => {
         impl Serialize for $primitive {
