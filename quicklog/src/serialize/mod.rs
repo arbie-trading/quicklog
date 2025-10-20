@@ -92,7 +92,6 @@ impl Display for Store<'_> {
     }
 }
 
-#[macro_export]
 macro_rules! gen_serialize {
     ($primitive:ty) => {
         impl Serialize for $primitive {
@@ -158,7 +157,7 @@ gen_serialize!(usize);
 #[macro_export]
 macro_rules! gen_serialize_enum {
     ($enum_type:ty, $($variant:ident),+) => {
-        impl Serialize for $enum_type {
+        impl $crate::serialize::Serialize for $enum_type {
             fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
                 let discriminant = *self as usize;
                 let size = self.buffer_size_required();
