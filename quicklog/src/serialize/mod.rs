@@ -124,6 +124,7 @@ gen_serialize!(f32);
 gen_serialize!(f64);
 gen_serialize!(u32);
 gen_serialize!(u64);
+gen_serialize!(u128);
 gen_serialize!(usize);
 
 impl Serialize for &str {
