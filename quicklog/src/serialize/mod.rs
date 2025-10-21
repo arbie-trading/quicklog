@@ -231,6 +231,87 @@ impl_fixed_size_serialize! {
     f64, 8,
 }
 
+/// Macro to generate `FixedSizeSerialize` implementations for newtype wrappers.
+///
+/// This macro handles the common pattern of wrapper types that delegate
+/// to their inner type's `to_le_bytes()` and `from_le_bytes()` methods.
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::impl_fixed_size_serialize_newtype;
+///
+/// pub struct OrderId(u64);
+/// impl_fixed_size_serialize_newtype!(OrderId, u64, 8);
+///
+/// pub struct Price(f64);
+/// impl_fixed_size_serialize_newtype!(Price, f64, 8);
+/// ```
+#[macro_export]
+macro_rules! impl_fixed_size_serialize_newtype {
+    ($wrapper:ty, $inner:ty, $size:expr) => {
+        impl $crate::serialize::FixedSizeSerialize<$size> for $wrapper {
+            fn to_le_bytes(&self) -> [u8; $size] {
+                self.0.to_le_bytes()
+            }
+
+            fn from_le_bytes(bytes: [u8; $size]) -> Self {
+                Self(<$inner>::from_le_bytes(bytes))
+            }
+        }
+    };
+}
+
+/// Macro to generate `FixedSizeSerialize` implementations for enums.
+///
+/// This macro handles unit enums with explicit discriminant values,
+/// serializing them as single bytes.
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::impl_fixed_size_serialize_enum;
+///
+/// #[repr(u8)]
+/// #[derive(Clone, Copy)]
+/// pub enum Side {
+///     Buy = 0,
+///     Sell = 1,
+/// }
+/// impl_fixed_size_serialize_enum!(Side, Buy = 0, Sell = 1);
+///
+/// #[repr(u8)]
+/// #[derive(Clone, Copy)]
+/// pub enum OrderType {
+///     Market = 0,
+///     Limit = 1,
+///     Stop = 2,
+/// }
+/// impl_fixed_size_serialize_enum!(OrderType, Market = 0, Limit = 1, Stop = 2);
+/// ```
+#[macro_export]
+macro_rules! impl_fixed_size_serialize_enum {
+    ($enum_type:ty, $($variant:ident = $value:expr),+ $(,)?) => {
+        impl $crate::serialize::FixedSizeSerialize<1> for $enum_type {
+            fn to_le_bytes(&self) -> [u8; 1] {
+                [*self as u8]
+            }
+
+            fn from_le_bytes(bytes: [u8; 1]) -> Self {
+                match bytes[0] {
+                    $($value => Self::$variant,)+
+                    _ => panic!(
+                        "Invalid {} discriminant: {}",
+                        stringify!($enum_type),
+                        bytes[0]
+                    ),
+                }
+            }
+        }
+    };
+}
+
+
 /// Generates a `Serialize` implementation for unit enums.
 ///
 /// This macro creates a `Serialize` implementation for enums with unit variants

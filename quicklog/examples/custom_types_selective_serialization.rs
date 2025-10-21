@@ -1,23 +1,20 @@
 use quicklog::{init, info, flush, FixedSizeSerialize, SerializeSelective};
+use quicklog::{impl_fixed_size_serialize_newtype, impl_fixed_size_serialize_enum};
 use quicklog::serialize::Serialize;
 use std::fmt::Display;
 
-// Example custom types from the user's use case
-// These demonstrate how to implement FixedSizeSerialize for various scenarios
+// Example custom types demonstrating different FixedSizeSerialize implementation approaches:
+//
+// 1. impl_fixed_size_serialize_newtype! - for simple wrapper types (Id, Price, Size, Timestamp)
+// 2. impl_fixed_size_serialize_enum! - for enums with explicit discriminants (Side)
+// 3. Manual implementation - for complex types requiring custom logic (MarketId)
 
 // Simple newtype wrapper around u128
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Id(u128);
 
-impl FixedSizeSerialize<16> for Id {
-    fn to_le_bytes(&self) -> [u8; 16] {
-        self.0.to_le_bytes()
-    }
-
-    fn from_le_bytes(bytes: [u8; 16]) -> Self {
-        Self(u128::from_le_bytes(bytes))
-    }
-}
+// Use macro for automatic FixedSizeSerialize implementation
+impl_fixed_size_serialize_newtype!(Id, u128, 16);
 
 impl Display for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -73,15 +70,18 @@ impl Display for MarketId {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Price(f64);
 
-impl FixedSizeSerialize<8> for Price {
-    fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
+// Simple wrapper around f64
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Size(f64);
 
-    fn from_le_bytes(bytes: [u8; 8]) -> Self {
-        Self(f64::from_le_bytes(bytes))
-    }
-}
+// Timestamp wrapper
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Timestamp(u64);
+
+// Use individual macros for each newtype wrapper
+impl_fixed_size_serialize_newtype!(Price, f64, 8);
+impl_fixed_size_serialize_newtype!(Size, f64, 8);
+impl_fixed_size_serialize_newtype!(Timestamp, u64, 8);
 
 impl Display for Price {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -89,23 +89,15 @@ impl Display for Price {
     }
 }
 
-// Simple wrapper around f64
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Size(f64);
-
-impl FixedSizeSerialize<8> for Size {
-    fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-
-    fn from_le_bytes(bytes: [u8; 8]) -> Self {
-        Self(f64::from_le_bytes(bytes))
-    }
-}
-
 impl Display for Size {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Size({})", self.0)
+    }
+}
+
+impl Display for Timestamp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Timestamp({})", self.0)
     }
 }
 
@@ -117,19 +109,8 @@ pub enum Side {
     Sell = 1,
 }
 
-impl FixedSizeSerialize<1> for Side {
-    fn to_le_bytes(&self) -> [u8; 1] {
-        [*self as u8]
-    }
-
-    fn from_le_bytes(bytes: [u8; 1]) -> Self {
-        match bytes[0] {
-            0 => Side::Buy,
-            1 => Side::Sell,
-            _ => panic!("Invalid Side discriminant: {}", bytes[0]),
-        }
-    }
-}
+// Use enum macro for automatic FixedSizeSerialize implementation
+impl_fixed_size_serialize_enum!(Side, Buy = 0, Sell = 1);
 
 impl Display for Side {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -137,26 +118,6 @@ impl Display for Side {
             Side::Buy => write!(f, "Buy"),
             Side::Sell => write!(f, "Sell"),
         }
-    }
-}
-
-// Timestamp wrapper
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Timestamp(u64);
-
-impl FixedSizeSerialize<8> for Timestamp {
-    fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-
-    fn from_le_bytes(bytes: [u8; 8]) -> Self {
-        Self(u64::from_le_bytes(bytes))
-    }
-}
-
-impl Display for Timestamp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Timestamp({})", self.0)
     }
 }
 
@@ -291,13 +252,14 @@ fn main() {
     flush!();
 
     println!("\n=== Summary ===");
-    println!("✅ Successfully demonstrated FixedSizeSerialize for:");
-    println!("   - Id (u128 wrapper)");
-    println!("   - MarketId (fixed-size string)");
-    println!("   - Price (f64 wrapper)");
-    println!("   - Size (f64 wrapper)");
-    println!("   - Side (enum)");
-    println!("   - Timestamp (u64 wrapper)");
+    println!("✅ Successfully demonstrated FixedSizeSerialize implementations:");
+    println!("   - Id, Price, Size, Timestamp (wrapper types) - using impl_fixed_size_serialize_newtype!");
+    println!("   - Side (enum) - using impl_fixed_size_serialize_enum!");
+    println!("   - MarketId (fixed-size string) - manual implementation for complex logic");
+    println!("✅ Two macro approaches for different use cases:");
+    println!("   - impl_fixed_size_serialize_newtype! for wrapper types");
+    println!("   - impl_fixed_size_serialize_enum! for unit enums");
+    println!("   - Manual implementations when custom logic is needed");
     println!("✅ All types work seamlessly with #[derive(SerializeSelective)]");
     println!("✅ Achieved high-performance selective field serialization");
 }

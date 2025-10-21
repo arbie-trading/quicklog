@@ -86,37 +86,45 @@ For maximum performance, quicklog provides **selective field serialization** tha
 
 ### Using FixedSizeSerialize for Custom Types
 
-Implement the `FixedSizeSerialize` trait for your custom types to enable high-performance selective serialization:
+For maximum convenience, quicklog provides macros that automatically implement the `FixedSizeSerialize` trait for common patterns:
+
+#### Easy Implementation with Macros
 
 ```rust
-use quicklog::{FixedSizeSerialize, SerializeSelective, info, init, flush};
+use quicklog::{impl_fixed_size_serialize_newtype, impl_fixed_size_serialize_enum};
 
-// Custom wrapper type
+// Simple wrapper types
 pub struct OrderId(u64);
+impl_fixed_size_serialize_newtype!(OrderId, u64, 8);
 
-impl FixedSizeSerialize<8> for OrderId {
-    fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
-    fn from_le_bytes(bytes: [u8; 8]) -> Self {
-        Self(u64::from_le_bytes(bytes))
-    }
-}
+pub struct Price(f64);
+impl_fixed_size_serialize_newtype!(Price, f64, 8);
 
-// Enum with fixed representation
+pub struct Timestamp(u64);
+impl_fixed_size_serialize_newtype!(Timestamp, u64, 8);
+
+// Enums with discriminants
 #[repr(u8)]
 pub enum Side { Buy = 0, Sell = 1 }
+impl_fixed_size_serialize_enum!(Side, Buy = 0, Sell = 1);
+```
 
-impl FixedSizeSerialize<1> for Side {
-    fn to_le_bytes(&self) -> [u8; 1] {
-        [*self as u8]
+#### Manual Implementation (for complex cases)
+
+For types requiring custom serialization logic, implement the trait manually:
+
+```rust
+use quicklog::FixedSizeSerialize;
+
+// Complex type with custom serialization
+pub struct MarketId([u8; 16]); // Fixed-size string with padding
+
+impl FixedSizeSerialize<16> for MarketId {
+    fn to_le_bytes(&self) -> [u8; 16] {
+        self.0  // Already in correct format
     }
-    fn from_le_bytes(bytes: [u8; 1]) -> Self {
-        match bytes[0] {
-            0 => Side::Buy,
-            1 => Side::Sell,
-            _ => panic!("Invalid Side"),
-        }
+    fn from_le_bytes(bytes: [u8; 16]) -> Self {
+        Self(bytes)
     }
 }
 ```
@@ -167,6 +175,21 @@ All primitive types automatically implement `FixedSizeSerialize`:
 - **Integers**: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `usize`, `isize`
 - **Floats**: `f32`, `f64`
 - **Options**: `Option<T>` where `T: FixedSizeSerialize`
+
+### Available Macros
+
+Quicklog provides two simple macros to eliminate boilerplate when implementing `FixedSizeSerialize`:
+
+| Macro | Use Case | Example |
+|-------|----------|---------|
+| `impl_fixed_size_serialize_newtype!` | Simple wrapper types | `impl_fixed_size_serialize_newtype!(UserId, u64, 8);` |
+| `impl_fixed_size_serialize_enum!` | Unit enums | `impl_fixed_size_serialize_enum!(Status, Active = 1, Inactive = 0);` |
+
+**Benefits of using macros:**
+- ✅ **Reduced boilerplate** - No need to write repetitive trait implementations
+- ✅ **Compile-time safety** - Automatic size calculations and type checks
+- ✅ **Consistency** - Uniform implementation patterns across your codebase
+- ✅ **Maintainability** - Easy to update if inner types change
 
 ### Utilising different flushing mechanisms
 
