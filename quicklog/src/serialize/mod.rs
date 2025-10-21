@@ -401,6 +401,54 @@ impl Serialize for &str {
     }
 }
 
+/// Blanket implementation of Serialize for Option<T> where T implements Serialize
+impl<T> Serialize for Option<T>
+where
+    T: Serialize,
+{
+    fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
+        match self {
+            Some(ref value) => {
+                let total_size = self.buffer_size_required();
+                let (chunk, rest) = write_buf.split_at_mut(total_size);
+
+                // Write Some marker
+                chunk[0] = 1;
+
+                // Encode the value after the marker
+                let (inner_store, _) = value.encode(&mut chunk[1..]);
+
+                // Create new store that includes the marker
+                (Store::new(Self::decode, chunk), rest)
+            }
+            None => {
+                let (chunk, rest) = write_buf.split_at_mut(1);
+                chunk[0] = 0; // None marker
+                (Store::new(Self::decode, chunk), rest)
+            }
+        }
+    }
+
+    fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+        let marker = read_buf[0];
+        if marker == 0 {
+            // None case
+            ("None".to_string(), &read_buf[1..])
+        } else {
+            // Some case - decode the inner value
+            let (inner_string, remaining) = T::decode(&read_buf[1..]);
+            (format!("Some({})", inner_string), remaining)
+        }
+    }
+
+    fn buffer_size_required(&self) -> usize {
+        match self {
+            Some(ref value) => 1 + value.buffer_size_required(), // marker + value size
+            None => 1, // just the marker
+        }
+    }
+}
+
 /// Eager evaluation into a String for debug structs
 pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store, &mut [u8]) {
     let val_string = format!("{:?}", val);
@@ -627,6 +675,103 @@ mod tests {
         assert_eq!(Level::Info as u8, 2);
         assert_eq!(Level::Warn as u8, 3);
         assert_eq!(Level::Error as u8, 4);
+    }
+
+    #[test]
+    fn serialize_option_some() {
+        let mut buf = [0; 128];
+
+        // Test Option<i32> with Some value
+        let some_value: Option<i32> = Some(42);
+        let (store, _) = some_value.encode(&mut buf);
+
+        // Verify encoding
+        assert_eq!(buf[0], 1); // Some marker
+        assert_eq!(&buf[1..5], &42i32.to_le_bytes()); // i32 value
+
+        // Verify decoding
+        assert_eq!(store.as_string(), "Some(42)");
+
+        // Verify buffer size
+        assert_eq!(some_value.buffer_size_required(), 5); // 1 marker + 4 bytes for i32
+    }
+
+    #[test]
+    fn serialize_option_none() {
+        let mut buf = [0; 128];
+
+        // Test Option<i32> with None value
+        let none_value: Option<i32> = None;
+        let (store, _) = none_value.encode(&mut buf);
+
+        // Verify encoding
+        assert_eq!(buf[0], 0); // None marker
+
+        // Verify decoding
+        assert_eq!(store.as_string(), "None");
+
+        // Verify buffer size
+        assert_eq!(none_value.buffer_size_required(), 1); // Just the marker
+    }
+
+    #[test]
+    fn serialize_option_string() {
+        let mut buf = [0; 128];
+
+        // Test Option<&str> with Some value
+        let some_str: Option<&str> = Some("hello");
+        let (store, _) = some_str.encode(&mut buf);
+
+        // Verify decoding
+        assert_eq!(store.as_string(), "Some(hello)");
+
+        // Test Option<&str> with None value
+        let none_str: Option<&str> = None;
+        let (store_none, _) = none_str.encode(&mut buf);
+        assert_eq!(store_none.as_string(), "None");
+    }
+
+    #[test]
+    fn serialize_nested_option() {
+        let mut buf = [0; 128];
+
+        // Test Option<Option<i32>>
+        let nested_some: Option<Option<i32>> = Some(Some(99));
+        let (store, _) = nested_some.encode(&mut buf);
+
+        // Should decode as "Some(Some(99))"
+        assert_eq!(store.as_string(), "Some(Some(99))");
+
+        // Test Option<Option<i32>> with inner None
+        let nested_inner_none: Option<Option<i32>> = Some(None);
+        let (store2, _) = nested_inner_none.encode(&mut buf);
+        assert_eq!(store2.as_string(), "Some(None)");
+
+        // Test Option<Option<i32>> with outer None
+        let nested_outer_none: Option<Option<i32>> = None;
+        let (store3, _) = nested_outer_none.encode(&mut buf);
+        assert_eq!(store3.as_string(), "None");
+    }
+
+    #[test]
+    fn serialize_option_roundtrip() {
+        let mut buf = [0; 128];
+
+        // Test roundtrip encoding/decoding
+        let original_some: Option<u64> = Some(12345678901234567890);
+        let original_none: Option<u64> = None;
+
+        // Encode both
+        let (store_some, remaining) = original_some.encode(&mut buf);
+        let (store_none, _) = original_none.encode(remaining);
+
+        // Verify they can be decoded correctly
+        assert_eq!(store_some.as_string(), "Some(12345678901234567890)");
+        assert_eq!(store_none.as_string(), "None");
+
+        // Verify buffer sizes
+        assert_eq!(original_some.buffer_size_required(), 9); // 1 marker + 8 bytes for u64
+        assert_eq!(original_none.buffer_size_required(), 1); // Just marker
     }
 }
 
