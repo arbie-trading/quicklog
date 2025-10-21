@@ -61,6 +61,72 @@ pub trait Serialize {
     fn buffer_size_required(&self) -> usize;
 }
 
+/// High-performance, fixed-size serialization for primitive-like types.
+///
+/// This trait is optimized for selective serialization where types have a known,
+/// fixed binary representation. Unlike the general `Serialize` trait, this trait
+/// uses compile-time const generics to specify exact byte sizes, enabling
+/// significant performance optimizations.
+///
+/// # Performance Benefits
+///
+/// - **Compile-time size calculation**: Buffer sizes are computed at compile time
+/// - **Zero virtual dispatch**: Direct method calls instead of trait objects
+/// - **Optimal memory layout**: Sequential encoding without Store overhead
+/// - **Cache-friendly access**: Predictable memory access patterns
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::serialize::FixedSizeSerialize;
+///
+/// pub struct OrderId(u64);
+///
+/// impl FixedSizeSerialize<8> for OrderId {
+///     fn to_le_bytes(&self) -> [u8; 8] {
+///         self.0.to_le_bytes()
+///     }
+///
+///     fn from_le_bytes(bytes: [u8; 8]) -> Self {
+///         Self(u64::from_le_bytes(bytes))
+///     }
+/// }
+/// ```
+///
+/// # Usage with Selective Serialization
+///
+/// Types implementing this trait can be used with the `#[derive(SerializeSelective)]`
+/// macro for optimal performance:
+///
+/// ```rust
+/// use quicklog::SerializeSelective;
+///
+/// #[derive(SerializeSelective)]
+/// pub struct Order {
+///     #[serialize] pub id: OrderId,    // Uses FixedSizeSerialize
+///     #[serialize] pub price: f64,     // Uses FixedSizeSerialize
+///     // ... other fields
+/// }
+/// ```
+pub trait FixedSizeSerialize<const N: usize> {
+    /// Convert to little-endian byte array.
+    ///
+    /// This method should produce a deterministic, fixed-size binary
+    /// representation of the type suitable for logging and serialization.
+    fn to_le_bytes(&self) -> [u8; N];
+
+    /// Convert from little-endian byte array.
+    ///
+    /// This method should be able to reconstruct the type from the
+    /// bytes produced by `to_le_bytes()`.
+    fn from_le_bytes(bytes: [u8; N]) -> Self;
+
+    /// The number of bytes required for serialization (always N).
+    ///
+    /// This is provided as a const for generic programming convenience.
+    const BYTE_SIZE: usize = N;
+}
+
 /// Function pointer which decodes a byte buffer back into `String` representation
 pub type DecodeFn = fn(&[u8]) -> (String, &[u8]);
 
@@ -126,6 +192,44 @@ gen_serialize!(u32);
 gen_serialize!(u64);
 gen_serialize!(u128);
 gen_serialize!(usize);
+
+/// Macro to generate `FixedSizeSerialize` implementations for primitive types.
+///
+/// This macro creates implementations that delegate to the primitive type's
+/// native `to_le_bytes()` and `from_le_bytes()` methods.
+macro_rules! impl_fixed_size_serialize {
+    ($($t:ty, $n:expr),* $(,)?) => {
+        $(
+            impl FixedSizeSerialize<$n> for $t {
+                fn to_le_bytes(&self) -> [u8; $n] {
+                    <$t>::to_le_bytes(*self)
+                }
+
+                fn from_le_bytes(bytes: [u8; $n]) -> Self {
+                    <$t>::from_le_bytes(bytes)
+                }
+            }
+        )*
+    };
+}
+
+// Implement FixedSizeSerialize for all primitive numeric types
+impl_fixed_size_serialize! {
+    u8, 1,
+    i8, 1,
+    u16, 2,
+    i16, 2,
+    u32, 4,
+    i32, 4,
+    u64, 8,
+    i64, 8,
+    u128, 16,
+    i128, 16,
+    usize, 8,   // Assuming 64-bit target
+    isize, 8,   // Assuming 64-bit target
+    f32, 4,
+    f64, 8,
+}
 
 /// Generates a `Serialize` implementation for unit enums.
 ///
@@ -443,4 +547,136 @@ mod tests {
         assert_eq!(Level::Warn as u8, 3);
         assert_eq!(Level::Error as u8, 4);
     }
+}
+
+/// Declarative macro for generating selective Serialize implementations
+///
+/// This provides a fallback when proc macros can't be used or for more complex scenarios.
+/// It generates a Serialize implementation that only includes specified fields.
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::serialize_selected_fields;
+///
+/// #[derive(Debug)]
+/// struct Order {
+///     pub oid: u64,
+///     pub cloid: Option<u64>,
+///     pub price: Option<f64>,
+///     pub size: f64,
+///     pub status: String,  // Not included in serialization
+/// }
+///
+/// serialize_selected_fields!(Order, {
+///     oid: u64,
+///     cloid: Option<u64>,
+///     price: Option<f64>,
+///     size: f64
+/// });
+/// ```
+#[macro_export]
+macro_rules! serialize_selected_fields {
+    ($struct_name:ty, { $($field:ident: $field_type:ty),* $(,)? }) => {
+        impl $crate::serialize::Serialize for $struct_name {
+            fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
+                let total_size = self.buffer_size_required();
+                let (chunk, rest) = write_buf.split_at_mut(total_size);
+                let mut offset = 0;
+
+                $(
+                    $crate::__encode_field_impl!(self.$field, chunk, offset, $field_type);
+                )*
+
+                ($crate::serialize::Store::new(Self::decode, chunk), rest)
+            }
+
+            fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+                let mut offset = 0;
+                let mut parts = Vec::new();
+
+                $(
+                    $crate::__decode_field_impl!(stringify!($field), read_buf, offset, parts, $field_type);
+                )*
+
+                let formatted = parts.join(" ");
+                (formatted, &read_buf[offset..])
+            }
+
+            fn buffer_size_required(&self) -> usize {
+                let mut total = 0;
+                $(
+                    total += $crate::__field_size_impl!(self.$field, $field_type);
+                )*
+                total
+            }
+        }
+    };
+}
+
+/// Internal helper macro for encoding fields (handles Option<T> and direct types)
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __encode_field_impl {
+    // Handle Option<T> types
+    ($field:expr, $chunk:expr, $offset:expr, Option<$inner:ty>) => {
+        if let Some(ref value) = $field {
+            $chunk[$offset] = 1; // Some marker
+            $offset += 1;
+            let bytes = value.to_le_bytes();
+            $chunk[$offset..$offset + bytes.len()].copy_from_slice(&bytes);
+            $offset += bytes.len();
+        } else {
+            $chunk[$offset] = 0; // None marker
+            $offset += 1;
+        }
+    };
+    // Handle direct types that implement to_le_bytes
+    ($field:expr, $chunk:expr, $offset:expr, $field_type:ty) => {
+        let bytes = $field.to_le_bytes();
+        $chunk[$offset..$offset + bytes.len()].copy_from_slice(&bytes);
+        $offset += bytes.len();
+    };
+}
+
+/// Internal helper macro for decoding fields
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __decode_field_impl {
+    // Handle Option<T> types
+    ($field_name:expr, $read_buf:expr, $offset:expr, $parts:expr, Option<$inner:ty>) => {
+        let has_value = $read_buf[$offset] != 0;
+        $offset += 1;
+        if has_value {
+            let value = <$inner>::from_le_bytes(
+                $read_buf[$offset..$offset + std::mem::size_of::<$inner>()].try_into().unwrap()
+            );
+            $parts.push(format!("{}={}", $field_name, value));
+            $offset += std::mem::size_of::<$inner>();
+        } else {
+            $parts.push(format!("{}=None", $field_name));
+        }
+    };
+    // Handle direct types
+    ($field_name:expr, $read_buf:expr, $offset:expr, $parts:expr, $field_type:ty) => {
+        let value = <$field_type>::from_le_bytes(
+            $read_buf[$offset..$offset + std::mem::size_of::<$field_type>()].try_into().unwrap()
+        );
+        $parts.push(format!("{}={}", $field_name, value));
+        $offset += std::mem::size_of::<$field_type>();
+    };
+}
+
+/// Internal helper macro for calculating field sizes
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __field_size_impl {
+    // Handle Option<T> types
+    ($field:expr, Option<$inner:ty>) => {
+        1 + $field.map_or(0, |_| std::mem::size_of::<$inner>())
+    };
+    // Handle direct types
+    ($field:expr, $field_type:ty) => {
+        std::mem::size_of::<$field_type>()
+    };
 }

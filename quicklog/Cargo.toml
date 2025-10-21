@@ -53,5 +53,9 @@ harness = false
 name = "quicklog_benchmark"
 harness = false
 
+[[bench]]
+name = "selective_serialization_benchmark"
+harness = false
+
 [badges]
 maintenance = { status = "actively-developed" }

@@ -5,6 +5,7 @@ mod derive;
 mod expand;
 mod format_arg;
 mod quicklog;
+mod selective_serialize;
 
 use derive::derive;
 use expand::expand;
@@ -40,4 +41,31 @@ pub fn error(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Serialize)]
 pub fn derive_serialize(input: TokenStream) -> TokenStream {
     derive(input)
+}
+
+/// Derive macro for generating selective `quicklog` `Serialize`
+/// implementations. Only fields marked with `#[serialize]` are included.
+///
+/// This is useful for large structs where you only want to log specific fields
+/// to reduce serialization overhead in high-performance scenarios.
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::SerializeSelective;
+///
+/// #[derive(SerializeSelective)]
+/// pub struct Order {
+///     #[serialize] pub oid: u64,
+///     #[serialize] pub cloid: Option<u64>,
+///     #[serialize] pub price: Option<f64>,
+///     #[serialize] pub size: f64,
+///     // These fields will NOT be serialized
+///     pub status: OrderStatus,
+///     pub filled_size: f64,
+/// }
+/// ```
+#[proc_macro_derive(SerializeSelective, attributes(serialize))]
+pub fn derive_serialize_selective(input: TokenStream) -> TokenStream {
+    selective_serialize::derive_selective_serialize(input)
 }
