@@ -46,7 +46,7 @@ fn main() {
     info!("hello world");
 
     let some_var = 10;
-    // variables are passed by copy
+    // primitive types use deferred formatting (raw bytes copied, string formatting at flush)
     info!("value of some_var: {}", some_var);
 
     // flushes everything in queue
