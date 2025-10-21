@@ -46,8 +46,12 @@ fn main() {
     info!("hello world");
 
     let some_var = 10;
-    // primitive types use deferred formatting (raw bytes copied, string formatting at flush)
+
+    // formats some_var at callsite
     info!("value of some_var: {}", some_var);
+
+    // defers formatting, only serializes at callsite
+    info!(^some_var, "value of some_var");
 
     // flushes everything in queue
     flush!();
@@ -174,7 +178,7 @@ fn main() {
 All primitive types automatically implement `FixedSizeSerialize`:
 - **Integers**: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `usize`, `isize`
 - **Floats**: `f32`, `f64`
-- **Options**: `Option<T>` where `T: FixedSizeSerialize`
+- **Options**: `Option<T>` where `T: Serialize`
 
 ### Available Macros
 
