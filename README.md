@@ -79,10 +79,12 @@ info!("Debug: {:?}", some_struct);
 ```
 
 **What happens:**
-- `^arg` → Serializes to bytes at callsite (~5-10ns, requires `Serialize` trait)
-- `arg` (no prefix) → Clones and defers formatting to flush time (~28-104ns)
+- `^arg` → Serializes to bytes at callsite (~5-10ns for struct fields, requires `Serialize` trait)
+- `arg` (no prefix) → Clones/copies and defers formatting to flush time (~1-2ns for primitives, ~28-104ns for structs)
 - `%arg` → Eagerly formats with Display at callsite (~600ns)
 - `?arg` → Eagerly formats with Debug at callsite (~600ns)
+
+**Important:** For primitive types (`u64`, `f64`, `i32`, etc.), the unprefixed version is fastest since they're `Copy`. The `^` prefix is only beneficial for structs with selective serialization.
 
 #### Structured Field Syntax
 
@@ -100,11 +102,41 @@ info!(^serialized, "message");
 
 | Syntax | Call Site Latency | When to Use |
 |--------|------------------|-------------|
-| `"text {}", ^var` | **~5-10ns** | High-frequency logging, hot paths |
-| `"text {}", var` | **~28-104ns** | General purpose, good balance |
-| `"text {}", %var` or `?var` | **~600ns** | Debugging, non-critical paths |
+| `"text {}", var` (primitive) | **~1-2ns** | Primitives (`u64`, `f64`, etc.) - fastest option |
+| `"text {}", ^var` (struct) | **~5-10ns** | Structs with `Serialize` - selective serialization |
+| `"text {}", var` (struct) | **~28-104ns** | Structs without `Serialize` - clones entire struct |
+| `"text {}", %var` or `?var` | **~600ns** | Debugging, non-critical paths - eager formatting |
 
-**Recommendation:** Use `^` prefix in format strings for maximum performance on hot paths, unprefixed args for convenience, and `%`/`?` only when you need immediate formatting (debugging).
+**Recommendation:**
+- For **primitives**: Use unprefixed args (fastest at ~1-2ns)
+- For **structs**: Use `^` prefix with `Serialize` trait (~5-10ns vs ~28-104ns for cloning)
+- For **debugging**: Use `%` or `?` when you need immediate formatting
+
+#### Example: Optimal Usage
+
+```rust
+// For structs: use ^ prefix
+info!(
+    "Received fill for position {}",
+    ^filled_position,    // Struct with Serialize: ~5-10ns
+);
+
+// For primitives: no prefix is fastest
+info!(
+    "Order: id={}, price={}, size={}",
+    order_id,    // Primitive u64: ~1-2ns
+    price,       // Primitive f64: ~1-2ns
+    size,        // Primitive f64: ~1-2ns
+);
+
+// Mixed: use appropriate strategy per field
+info!(
+    "Fill: position={}, price={}, qty={}",
+    ^position,   // Struct: ~5-10ns
+    price,       // Primitive: ~1-2ns
+    qty,         // Primitive: ~1-2ns
+);
+```
 
 ### Utilising `Serialize`
 
