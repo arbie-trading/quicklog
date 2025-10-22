@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use quicklog::serialize::Serialize;
-use quicklog::{serialize_selected_fields, SerializeSelective, FixedSizeSerialize};
+use quicklog::{SerializeSelective, FixedSizeSerialize};
 use std::fmt::{Debug, Display};
 
 // Test structs for benchmarking
@@ -35,29 +35,25 @@ pub struct Order {
     pub avg_fill_price: Option<f64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, SerializeSelective)]
 pub struct Position {
+    #[serialize]
     pub position_id: u64,
+    #[serialize]
     pub symbol: u32,
+    #[serialize]
     pub size: f64,
+    #[serialize]
     pub avg_price: f64,
+    #[serialize]
     pub unrealized_pnl_cents: i64,
+    #[serialize]
     pub realized_pnl: f64,
     // Not serialized fields
     pub last_updated: u64,
     pub margin_used: f64,
     pub maintenance_margin: f64,
 }
-
-// Apply declarative macro to Position
-serialize_selected_fields!(Position, {
-    position_id: u64,
-    symbol: u32,
-    size: f64,
-    avg_price: f64,
-    unrealized_pnl_cents: i64,
-    realized_pnl: f64
-});
 
 // Custom types implementing FixedSizeSerialize for testing trait-based approach
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,0 +1,737 @@
+warning: unused macro definition: `gen_serialize`
+   --> quicklog/src/serialize/mod.rs:173:14
+    |
+173 | macro_rules! gen_serialize {
+    |              ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` on by default
+
+warning: creating a mutable reference to mutable static
+   --> quicklog/src/lib.rs:276:14
+    |
+276 |     unsafe { &mut LOGGER }
+    |              ^^^^^^^^^^^ mutable reference to mutable static
+    |
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: mutable references to mutable statics are dangerous; it's undefined behavior if any other pointer to the static is used or if any other reference is created for the static while the mutable reference lives
+    = note: `#[warn(static_mut_refs)]` on by default
+help: use `&raw mut` instead to create a raw pointer
+    |
+276 |     unsafe { &raw mut LOGGER }
+    |               +++
+
+warning: creating a mutable reference to mutable static
+   --> quicklog/src/lib.rs:341:63
+    |
+341 |         let (sender, receiver): (Sender, Receiver) = unsafe { QUEUE.split() };
+    |                                                               ^^^^^^^^^^^^^ mutable reference to mutable static
+    |
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: mutable references to mutable statics are dangerous; it's undefined behavior if any other pointer to the static is used or if any other reference is created for the static while the mutable reference lives
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> quicklog/src/serialize/mod.rs:157:45
+    |
+157 |     pub fn new(decode_fn: DecodeFn, buffer: &[u8]) -> Store {
+    |                                             ^^^^^     ----- the same lifetime is hidden here
+    |                                             |
+    |                                             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+157 |     pub fn new(decode_fn: DecodeFn, buffer: &[u8]) -> Store<'_> {
+    |                                                            ++++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> quicklog/src/serialize/mod.rs:474:60
+    |
+474 | pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store, &mut [u8]) {
+    |                                                            ^^^^^^^^^      -----  --------- the same lifetime is elided here
+    |                                                            |              |
+    |                                                            |              the same lifetime is hidden here
+    |                                                            the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+474 | pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store<'_>, &mut [u8]) {
+    |                                                                                ++++
+
+warning: `quicklog` (lib) generated 5 warnings
+   Compiling quicklog v0.2.1 (/Users/grantwei/quicklog2/quicklog)
+warning: unused import: `crate::serialize::encode_debug`
+ --> quicklog/src/serialize/tests.rs:1:5
+  |
+1 | use crate::serialize::encode_debug;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `super::Serialize`
+ --> quicklog/src/serialize/tests.rs:3:5
+  |
+3 | use super::Serialize;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Serialize` and `Store`
+ --> quicklog/benches/quicklog_benchmark.rs:5:17
+  |
+5 |     serialize::{Serialize, Store},
+  |                 ^^^^^^^^^  ^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: variant `Bid` is never constructed
+  --> quicklog/benches/quicklog_benchmark.rs:36:5
+   |
+35 | enum Side {
+   |      ---- variant in this enum
+36 |     Bid,
+   |     ^^^
+   |
+   = note: `Side` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: fields `symbol`, `id`, and `side` are never read
+  --> quicklog/benches/quicklog_benchmark.rs:42:5
+   |
+41 | struct SmallStruct {
+   |        ----------- fields in this struct
+42 |     symbol: &'static str,
+   |     ^^^^^^
+43 |     id: u64,
+   |     ^^
+44 |     side: Side,
+   |     ^^^^
+   |
+   = note: `SmallStruct` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `vec` and `some` are never read
+  --> quicklog/benches/quicklog_benchmark.rs:49:5
+   |
+48 | struct BigStruct {
+   |        --------- fields in this struct
+49 |     vec: [i32; 100],
+   |     ^^^
+50 |     some: &'static str,
+   |     ^^^^
+   |
+   = note: `BigStruct` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: creating a shared reference to mutable static
+   --> quicklog/benches/logger_benchmark.rs:197:26
+    |
+197 |             senders.push(CHANNEL.0.clone());
+    |                          ^^^^^^^^^^^^^^^^^ shared reference to mutable static
+    |
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: shared references to mutable statics are dangerous; it's undefined behavior if the static is mutated or if a mutable reference is created for it while the shared reference lives
+    = note: `#[warn(static_mut_refs)]` on by default
+
+warning: creating a shared reference to mutable static
+   --> quicklog/benches/logger_benchmark.rs:205:17
+    |
+205 |                 CHANNEL.0.send(Box::new(arg)).unwrap_or(());
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ shared reference to mutable static
+    |
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: shared references to mutable statics are dangerous; it's undefined behavior if the static is mutated or if a mutable reference is created for it while the shared reference lives
+
+warning: creating a shared reference to mutable static
+   --> quicklog/benches/logger_benchmark.rs:208:26
+    |
+208 |         { while unsafe { CHANNEL.1.recv_timeout(Duration::from_millis(10)).is_ok() } {} }
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ shared reference to mutable static
+    |
+    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+    = note: shared references to mutable statics are dangerous; it's undefined behavior if the static is mutated or if a mutable reference is created for it while the shared reference lives
+
+warning: `quicklog` (lib test) generated 7 warnings (5 duplicates) (run `cargo fix --lib -p quicklog --tests` to apply 2 suggestions)
+warning: `quicklog` (bench "logger_benchmark") generated 3 warnings
+warning: `quicklog` (bench "quicklog_benchmark") generated 4 warnings (run `cargo fix --bench "quicklog_benchmark"` to apply 1 suggestion)
+    Finished `bench` profile [optimized] target(s) in 1.91s
+     Running unittests src/lib.rs (/Users/grantwei/quicklog2/target/release/deps/quicklog-c02ec0c056071a36)
+
+running 1 test
+test level::tests::compare_level_and_filters ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running benches/logger_benchmark.rs (/Users/grantwei/quicklog2/target/release/deps/logger_benchmark-b8f8c16d930d1370)
+Benchmarking Loggers/bench clock
+Benchmarking Loggers/bench clock: Warming up for 3.0000 s
+Benchmarking Loggers/bench clock: Collecting 100 samples in estimated 5.0000 s (472M iterations)
+Benchmarking Loggers/bench clock: Analyzing
+Loggers/bench clock     time:   [10.567 ns 10.587 ns 10.615 ns]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+Benchmarking Loggers/bench lazy_format
+Benchmarking Loggers/bench lazy_format: Warming up for 3.0000 s
+Benchmarking Loggers/bench lazy_format: Collecting 100 samples in estimated 5.0003 s (58M iterations)
+Benchmarking Loggers/bench lazy_format: Analyzing
+Loggers/bench lazy_format
+                        time:   [86.139 ns 87.223 ns 88.313 ns]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+Benchmarking Loggers/bench to_owned Nested
+Benchmarking Loggers/bench to_owned Nested: Warming up for 3.0000 s
+Benchmarking Loggers/bench to_owned Nested: Collecting 100 samples in estimated 5.0003 s (59M iterations)
+Benchmarking Loggers/bench to_owned Nested: Analyzing
+Loggers/bench to_owned Nested
+                        time:   [85.328 ns 86.737 ns 88.229 ns]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+Benchmarking Loggers/bench Channel send
+Benchmarking Loggers/bench Channel send: Warming up for 3.0000 s
+Benchmarking Loggers/bench Channel send: Collecting 100 samples in estimated 5.0038 s (5.6M iterations)
+Benchmarking Loggers/bench Channel send: Analyzing
+Loggers/bench Channel send
+                        time:   [431.25 ns 434.89 ns 439.36 ns]
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+Benchmarking Loggers/bench box Nested lazy_format
+Benchmarking Loggers/bench box Nested lazy_format: Warming up for 3.0000 s
+Benchmarking Loggers/bench box Nested lazy_format: Collecting 100 samples in estimated 5.0004 s (46M iterations)
+Benchmarking Loggers/bench box Nested lazy_format: Analyzing
+Loggers/bench box Nested lazy_format
+                        time:   [104.96 ns 106.15 ns 107.39 ns]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+Benchmarking Loggers/bench format Nested
+Benchmarking Loggers/bench format Nested: Warming up for 3.0000 s
+Benchmarking Loggers/bench format Nested: Collecting 100 samples in estimated 5.0163 s (389k iterations)
+Benchmarking Loggers/bench format Nested: Analyzing
+Loggers/bench format Nested
+                        time:   [12.915 µs 12.953 µs 13.011 µs]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  5 (5.00%) high severe
+Benchmarking Loggers/bench log BigStruct serialize
+Benchmarking Loggers/bench log BigStruct serialize: Warming up for 3.0000 s
+Benchmarking Loggers/bench log BigStruct serialize: Collecting 100 samples in estimated 5.0001 s (130M iterations)
+Benchmarking Loggers/bench log BigStruct serialize: Analyzing
+Loggers/bench log BigStruct serialize
+                        time:   [38.055 ns 38.246 ns 38.474 ns]
+Found 6 outliers among 100 measurements (6.00%)
+  5 (5.00%) high mild
+  1 (1.00%) high severe
+Benchmarking Loggers/bench log BigStruct
+Benchmarking Loggers/bench log BigStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench log BigStruct: Collecting 100 samples in estimated 5.0000 s (91M iterations)
+Benchmarking Loggers/bench log BigStruct: Analyzing
+Loggers/bench log BigStruct
+                        time:   [54.535 ns 54.621 ns 54.714 ns]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+Benchmarking Loggers/bench log BigStruct ref
+Benchmarking Loggers/bench log BigStruct ref: Warming up for 3.0000 s
+Benchmarking Loggers/bench log BigStruct ref: Collecting 100 samples in estimated 5.0000 s (87M iterations)
+Benchmarking Loggers/bench log BigStruct ref: Analyzing
+Loggers/bench log BigStruct ref
+                        time:   [54.677 ns 54.804 ns 55.004 ns]
+Found 7 outliers among 100 measurements (7.00%)
+  2 (2.00%) low severe
+  2 (2.00%) low mild
+  3 (3.00%) high severe
+Benchmarking Loggers/bench log no args
+Benchmarking Loggers/bench log no args: Warming up for 3.0000 s
+Benchmarking Loggers/bench log no args: Collecting 100 samples in estimated 5.0000 s (557M iterations)
+Benchmarking Loggers/bench log no args: Analyzing
+Loggers/bench log no args
+                        time:   [8.8173 ns 8.8308 ns 8.8447 ns]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+Benchmarking Loggers/bench recycle box lazy format
+Benchmarking Loggers/bench recycle box lazy format: Warming up for 3.0000 s
+Benchmarking Loggers/bench recycle box lazy format: Collecting 100 samples in estimated 5.0002 s (52M iterations)
+Benchmarking Loggers/bench recycle box lazy format: Analyzing
+Loggers/bench recycle box lazy format
+                        time:   [95.567 ns 96.936 ns 98.273 ns]
+
+     Running benches/quicklog_benchmark.rs (/Users/grantwei/quicklog2/target/release/deps/quicklog_benchmark-5e6bce5808c66700)
+Benchmarking Loggers/bench quicklog
+Benchmarking Loggers/bench quicklog: Warming up for 3.0000 s
+Benchmarking Loggers/bench quicklog: Collecting 100 samples in estimated 5.0002 s (41M iterations)
+Benchmarking Loggers/bench quicklog: Analyzing
+Loggers/bench quicklog  time:   [109.61 ns 110.92 ns 112.25 ns]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+Benchmarking Loggers/bench tracing
+Benchmarking Loggers/bench tracing: Warming up for 3.0000 s
+Benchmarking Loggers/bench tracing: Collecting 100 samples in estimated 5.0367 s (232k iterations)
+Benchmarking Loggers/bench tracing: Analyzing
+Loggers/bench tracing   time:   [21.526 µs 21.571 µs 21.616 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+Benchmarking Loggers/bench delog
+Benchmarking Loggers/bench delog: Warming up for 3.0000 s
+Benchmarking Loggers/bench delog: Collecting 100 samples in estimated 5.1025 s (232k iterations)
+Benchmarking Loggers/bench delog: Analyzing
+Loggers/bench delog     time:   [21.542 µs 21.599 µs 21.678 µs]
+Found 6 outliers among 100 measurements (6.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking Loggers/bench quicklog BigStruct
+Benchmarking Loggers/bench quicklog BigStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench quicklog BigStruct: Collecting 100 samples in estimated 5.0000 s (87M iterations)
+Benchmarking Loggers/bench quicklog BigStruct: Analyzing
+Loggers/bench quicklog BigStruct
+                        time:   [58.052 ns 59.393 ns 61.020 ns]
+Found 9 outliers among 100 measurements (9.00%)
+  4 (4.00%) high mild
+  5 (5.00%) high severe
+Benchmarking Loggers/bench tracing BigStruct
+Benchmarking Loggers/bench tracing BigStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench tracing BigStruct: Collecting 100 samples in estimated 5.0030 s (1.9M iterations)
+Benchmarking Loggers/bench tracing BigStruct: Analyzing
+Loggers/bench tracing BigStruct
+                        time:   [2.5811 µs 2.5895 µs 2.6003 µs]
+Found 13 outliers among 100 measurements (13.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  9 (9.00%) high severe
+Benchmarking Loggers/bench delog BigStruct
+Benchmarking Loggers/bench delog BigStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench delog BigStruct: Collecting 100 samples in estimated 5.0009 s (1.9M iterations)
+Benchmarking Loggers/bench delog BigStruct: Analyzing
+Loggers/bench delog BigStruct
+                        time:   [2.6386 µs 2.6465 µs 2.6572 µs]
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+Benchmarking Loggers/bench quicklog SmallStruct
+Benchmarking Loggers/bench quicklog SmallStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench quicklog SmallStruct: Collecting 100 samples in estimated 5.0000 s (224M iterations)
+Benchmarking Loggers/bench quicklog SmallStruct: Analyzing
+Loggers/bench quicklog SmallStruct
+                        time:   [21.935 ns 21.975 ns 22.027 ns]
+Found 7 outliers among 100 measurements (7.00%)
+  3 (3.00%) low mild
+  1 (1.00%) high mild
+  3 (3.00%) high severe
+Benchmarking Loggers/bench tracing SmallStruct
+Benchmarking Loggers/bench tracing SmallStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench tracing SmallStruct: Collecting 100 samples in estimated 5.0033 s (7.4M iterations)
+Benchmarking Loggers/bench tracing SmallStruct: Analyzing
+Loggers/bench tracing SmallStruct
+                        time:   [669.93 ns 670.93 ns 671.98 ns]
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+Benchmarking Loggers/bench delog SmallStruct
+Benchmarking Loggers/bench delog SmallStruct: Warming up for 3.0000 s
+Benchmarking Loggers/bench delog SmallStruct: Collecting 100 samples in estimated 5.0010 s (6.9M iterations)
+Benchmarking Loggers/bench delog SmallStruct: Analyzing
+Loggers/bench delog SmallStruct
+                        time:   [725.08 ns 726.26 ns 727.44 ns]
+Found 7 outliers among 100 measurements (7.00%)
+  2 (2.00%) low severe
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+
+     Running benches/selective_serialization_benchmark.rs (/Users/grantwei/quicklog2/target/release/deps/selective_serialization_benchmark-a16590ca9c637b85)
+Benchmarking order_selective_serialize_encode_only
+Benchmarking order_selective_serialize_encode_only: Warming up for 3.0000 s
+Benchmarking order_selective_serialize_encode_only: Collecting 100 samples in estimated 5.0000 s (861M iterations)
+Benchmarking order_selective_serialize_encode_only: Analyzing
+order_selective_serialize_encode_only
+                        time:   [5.7828 ns 5.7914 ns 5.8010 ns]
+                        change: [+0.8924% +1.5669% +2.4935%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking order_selective_serialize_full_cycle
+Benchmarking order_selective_serialize_full_cycle: Warming up for 3.0000 s
+Benchmarking order_selective_serialize_full_cycle: Collecting 100 samples in estimated 5.0006 s (26M iterations)
+Benchmarking order_selective_serialize_full_cycle: Analyzing
+order_selective_serialize_full_cycle
+                        time:   [189.65 ns 189.90 ns 190.15 ns]
+                        change: [-0.2006% +0.5623% +1.2335%] (p = 0.13 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking order_debug_format
+Benchmarking order_debug_format: Warming up for 3.0000 s
+Benchmarking order_debug_format: Collecting 100 samples in estimated 5.0032 s (7.7M iterations)
+Benchmarking order_debug_format: Analyzing
+order_debug_format      time:   [643.17 ns 645.19 ns 648.11 ns]
+                        change: [+1.3002% +1.6817% +2.0684%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+
+Benchmarking order_display_format
+Benchmarking order_display_format: Warming up for 3.0000 s
+Benchmarking order_display_format: Collecting 100 samples in estimated 5.0012 s (14M iterations)
+Benchmarking order_display_format: Analyzing
+order_display_format    time:   [351.19 ns 351.70 ns 352.23 ns]
+                        change: [+1.1832% +1.5804% +1.9123%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+
+Benchmarking order_manual_format
+Benchmarking order_manual_format: Warming up for 3.0000 s
+Benchmarking order_manual_format: Collecting 100 samples in estimated 5.0003 s (24M iterations)
+Benchmarking order_manual_format: Analyzing
+order_manual_format     time:   [206.42 ns 206.91 ns 207.43 ns]
+                        change: [+0.6187% +0.9507% +1.3171%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking position_declarative_macro_full_cycle
+Benchmarking position_declarative_macro_full_cycle: Warming up for 3.0000 s
+Benchmarking position_declarative_macro_full_cycle: Collecting 100 samples in estimated 5.0000 s (27M iterations)
+Benchmarking position_declarative_macro_full_cycle: Analyzing
+position_declarative_macro_full_cycle
+                        time:   [184.95 ns 187.89 ns 191.71 ns]
+                        change: [+2.4390% +3.6517% +5.0463%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 12 outliers among 100 measurements (12.00%)
+  3 (3.00%) high mild
+  9 (9.00%) high severe
+
+Benchmarking buffer_size_calculation
+Benchmarking buffer_size_calculation: Warming up for 3.0000 s
+Benchmarking buffer_size_calculation: Collecting 100 samples in estimated 5.0000 s (13B iterations)
+Benchmarking buffer_size_calculation: Analyzing
+buffer_size_calculation time:   [383.11 ps 385.83 ps 389.50 ps]
+                        change: [+0.5364% +1.1034% +1.6926%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  3 (3.00%) high severe
+
+Benchmarking throughput_comparison/selective_serialize
+Benchmarking throughput_comparison/selective_serialize: Warming up for 3.0000 s
+Benchmarking throughput_comparison/selective_serialize: Collecting 100 samples in estimated 5.0002 s (26M iterations)
+Benchmarking throughput_comparison/selective_serialize: Analyzing
+throughput_comparison/selective_serialize
+                        time:   [189.78 ns 190.04 ns 190.31 ns]
+                        thrpt:  [5.2545 Melem/s 5.2622 Melem/s 5.2693 Melem/s]
+                 change:
+                        time:   [+1.1232% +1.3485% +1.5867%] (p = 0.00 < 0.05)
+                        thrpt:  [-1.5619% -1.3306% -1.1107%]
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  1 (1.00%) high severe
+Benchmarking throughput_comparison/debug_format
+Benchmarking throughput_comparison/debug_format: Warming up for 3.0000 s
+Benchmarking throughput_comparison/debug_format: Collecting 100 samples in estimated 5.0032 s (7.8M iterations)
+Benchmarking throughput_comparison/debug_format: Analyzing
+throughput_comparison/debug_format
+                        time:   [642.71 ns 643.52 ns 644.39 ns]
+                        thrpt:  [1.5519 Melem/s 1.5540 Melem/s 1.5559 Melem/s]
+                 change:
+                        time:   [+0.5176% +0.8980% +1.2669%] (p = 0.00 < 0.05)
+                        thrpt:  [-1.2510% -0.8900% -0.5149%]
+                        Change within noise threshold.
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low severe
+  3 (3.00%) low mild
+  2 (2.00%) high mild
+  4 (4.00%) high severe
+Benchmarking throughput_comparison/display_format
+Benchmarking throughput_comparison/display_format: Warming up for 3.0000 s
+Benchmarking throughput_comparison/display_format: Collecting 100 samples in estimated 5.0016 s (14M iterations)
+Benchmarking throughput_comparison/display_format: Analyzing
+throughput_comparison/display_format
+                        time:   [351.77 ns 352.47 ns 353.22 ns]
+                        thrpt:  [2.8311 Melem/s 2.8371 Melem/s 2.8428 Melem/s]
+                 change:
+                        time:   [+1.9831% +2.7234% +3.8626%] (p = 0.00 < 0.05)
+                        thrpt:  [-3.7189% -2.6512% -1.9445%]
+                        Performance has regressed.
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+Benchmarking throughput_comparison/manual_format
+Benchmarking throughput_comparison/manual_format: Warming up for 3.0000 s
+Benchmarking throughput_comparison/manual_format: Collecting 100 samples in estimated 5.0009 s (24M iterations)
+Benchmarking throughput_comparison/manual_format: Analyzing
+throughput_comparison/manual_format
+                        time:   [207.87 ns 214.44 ns 224.49 ns]
+                        thrpt:  [4.4545 Melem/s 4.6633 Melem/s 4.8108 Melem/s]
+                 change:
+                        time:   [-0.4994% +1.3718% +4.1253%] (p = 0.26 > 0.05)
+                        thrpt:  [-3.9619% -1.3532% +0.5019%]
+                        No change in performance detected.
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  5 (5.00%) high severe
+
+Benchmarking batch_processing/batch_selective_serialize
+Benchmarking batch_processing/batch_selective_serialize: Warming up for 3.0000 s
+Benchmarking batch_processing/batch_selective_serialize: Collecting 100 samples in estimated 5.0016 s (25k iterations)
+Benchmarking batch_processing/batch_selective_serialize: Analyzing
+batch_processing/batch_selective_serialize
+                        time:   [198.89 µs 199.52 µs 200.23 µs]
+                        thrpt:  [4.9941 Melem/s 5.0120 Melem/s 5.0279 Melem/s]
+                 change:
+                        time:   [-0.1214% +0.3330% +0.7715%] (p = 0.14 > 0.05)
+                        thrpt:  [-0.7656% -0.3319% +0.1216%]
+                        No change in performance detected.
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking batch_processing/batch_debug_format
+Benchmarking batch_processing/batch_debug_format: Warming up for 3.0000 s
+Benchmarking batch_processing/batch_debug_format: Collecting 100 samples in estimated 6.5588 s (10k iterations)
+Benchmarking batch_processing/batch_debug_format: Analyzing
+batch_processing/batch_debug_format
+                        time:   [648.41 µs 650.31 µs 652.92 µs]
+                        thrpt:  [1.5316 Melem/s 1.5377 Melem/s 1.5422 Melem/s]
+                 change:
+                        time:   [+1.8045% +2.0943% +2.3976%] (p = 0.00 < 0.05)
+                        thrpt:  [-2.3415% -2.0513% -1.7725%]
+                        Performance has regressed.
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  3 (3.00%) high severe
+Benchmarking batch_processing/batch_display_format
+Benchmarking batch_processing/batch_display_format: Warming up for 3.0000 s
+Benchmarking batch_processing/batch_display_format: Collecting 100 samples in estimated 5.0120 s (15k iterations)
+Benchmarking batch_processing/batch_display_format: Analyzing
+batch_processing/batch_display_format
+                        time:   [332.71 µs 335.00 µs 337.57 µs]
+                        thrpt:  [2.9624 Melem/s 2.9851 Melem/s 3.0056 Melem/s]
+                 change:
+                        time:   [+3.5996% +4.2676% +5.2913%] (p = 0.00 < 0.05)
+                        thrpt:  [-5.0254% -4.0929% -3.4745%]
+                        Performance has regressed.
+Found 11 outliers among 100 measurements (11.00%)
+  4 (4.00%) high mild
+  7 (7.00%) high severe
+
+Benchmarking memory_efficiency/selective_serialize_buffer_size
+Benchmarking memory_efficiency/selective_serialize_buffer_size: Warming up for 3.0000 s
+Benchmarking memory_efficiency/selective_serialize_buffer_size: Collecting 100 samples in estimated 5.0000 s (13B iterations)
+Benchmarking memory_efficiency/selective_serialize_buffer_size: Analyzing
+memory_efficiency/selective_serialize_buffer_size
+                        time:   [382.00 ps 382.86 ps 383.89 ps]
+                        change: [+2.3119% +2.6279% +2.9040%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+Benchmarking memory_efficiency/selective_serialize_memory_pattern
+Benchmarking memory_efficiency/selective_serialize_memory_pattern: Warming up for 3.0000 s
+Benchmarking memory_efficiency/selective_serialize_memory_pattern: Collecting 100 samples in estimated 5.0744 s (268k iterations)
+Benchmarking memory_efficiency/selective_serialize_memory_pattern: Analyzing
+memory_efficiency/selective_serialize_memory_pattern
+                        time:   [18.930 µs 18.955 µs 18.981 µs]
+                        change: [+2.0763% +2.4045% +2.6990%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 7 outliers among 100 measurements (7.00%)
+  1 (1.00%) low severe
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking memory_efficiency/string_format_memory_pattern
+Benchmarking memory_efficiency/string_format_memory_pattern: Warming up for 3.0000 s
+Benchmarking memory_efficiency/string_format_memory_pattern: Collecting 100 samples in estimated 5.0507 s (157k iterations)
+Benchmarking memory_efficiency/string_format_memory_pattern: Analyzing
+memory_efficiency/string_format_memory_pattern
+                        time:   [32.273 µs 32.324 µs 32.378 µs]
+                        change: [+1.9090% +2.1691% +2.4391%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+
+Benchmarking high_frequency_simulation/hft_selective_serialize
+Benchmarking high_frequency_simulation/hft_selective_serialize: Warming up for 3.0000 s
+Benchmarking high_frequency_simulation/hft_selective_serialize: Collecting 1000 samples in estimated 5.0007 s (864M iterations)
+Benchmarking high_frequency_simulation/hft_selective_serialize: Analyzing
+high_frequency_simulation/hft_selective_serialize
+                        time:   [5.7815 ns 5.7885 ns 5.7958 ns]
+                        change: [+1.6962% +1.9150% +2.1361%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 35 outliers among 1000 measurements (3.50%)
+  24 (2.40%) high mild
+  11 (1.10%) high severe
+Benchmarking high_frequency_simulation/hft_immediate_format
+Benchmarking high_frequency_simulation/hft_immediate_format: Warming up for 3.0000 s
+Benchmarking high_frequency_simulation/hft_immediate_format: Collecting 1000 samples in estimated 5.0471 s (25M iterations)
+Benchmarking high_frequency_simulation/hft_immediate_format: Analyzing
+high_frequency_simulation/hft_immediate_format
+                        time:   [204.75 ns 204.98 ns 205.21 ns]
+                        change: [+1.8791% +2.0671% +2.2621%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 42 outliers among 1000 measurements (4.20%)
+  29 (2.90%) high mild
+  13 (1.30%) high severe
+
+Benchmarking option_handling/selective_serialize_with_some_values
+Benchmarking option_handling/selective_serialize_with_some_values: Warming up for 3.0000 s
+Benchmarking option_handling/selective_serialize_with_some_values: Collecting 100 samples in estimated 5.0001 s (26M iterations)
+Benchmarking option_handling/selective_serialize_with_some_values: Analyzing
+option_handling/selective_serialize_with_some_values
+                        time:   [189.73 ns 189.94 ns 190.17 ns]
+                        change: [+1.8013% +2.1362% +2.4408%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking option_handling/selective_serialize_with_none_values
+Benchmarking option_handling/selective_serialize_with_none_values: Warming up for 3.0000 s
+Benchmarking option_handling/selective_serialize_with_none_values: Collecting 100 samples in estimated 5.0002 s (38M iterations)
+Benchmarking option_handling/selective_serialize_with_none_values: Analyzing
+option_handling/selective_serialize_with_none_values
+                        time:   [133.18 ns 133.46 ns 133.85 ns]
+                        change: [+2.4471% +2.7142% +3.0002%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 5 outliers among 100 measurements (5.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  2 (2.00%) high severe
+Benchmarking option_handling/format_with_some_values
+Benchmarking option_handling/format_with_some_values: Warming up for 3.0000 s
+Benchmarking option_handling/format_with_some_values: Collecting 100 samples in estimated 5.0003 s (14M iterations)
+Benchmarking option_handling/format_with_some_values: Analyzing
+option_handling/format_with_some_values
+                        time:   [350.87 ns 351.54 ns 352.23 ns]
+                        change: [+1.9449% +2.2250% +2.4890%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  1 (1.00%) high severe
+Benchmarking option_handling/format_with_none_values
+Benchmarking option_handling/format_with_none_values: Warming up for 3.0000 s
+Benchmarking option_handling/format_with_none_values: Collecting 100 samples in estimated 5.0012 s (19M iterations)
+Benchmarking option_handling/format_with_none_values: Analyzing
+option_handling/format_with_none_values
+                        time:   [260.46 ns 260.88 ns 261.31 ns]
+                        change: [+1.9424% +2.1984% +2.4595%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high severe
+
+Benchmarking custom_types_selective_serialize_full_cycle
+Benchmarking custom_types_selective_serialize_full_cycle: Warming up for 3.0000 s
+Benchmarking custom_types_selective_serialize_full_cycle: Collecting 100 samples in estimated 5.0007 s (22M iterations)
+Benchmarking custom_types_selective_serialize_full_cycle: Analyzing
+custom_types_selective_serialize_full_cycle
+                        time:   [229.92 ns 230.16 ns 230.43 ns]
+                        change: [+1.3933% +1.7381% +2.0744%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 10 outliers among 100 measurements (10.00%)
+  2 (2.00%) low severe
+  3 (3.00%) low mild
+  5 (5.00%) high mild
+
+Benchmarking custom_types_format_comparison/custom_types_selective
+Benchmarking custom_types_format_comparison/custom_types_selective: Warming up for 3.0000 s
+Benchmarking custom_types_format_comparison/custom_types_selective: Collecting 100 samples in estimated 5.0008 s (22M iterations)
+Benchmarking custom_types_format_comparison/custom_types_selective: Analyzing
+custom_types_format_comparison/custom_types_selective
+                        time:   [230.24 ns 231.52 ns 233.77 ns]
+                        change: [+2.5712% +3.7511% +5.6536%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low severe
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+Benchmarking custom_types_format_comparison/custom_types_debug
+Benchmarking custom_types_format_comparison/custom_types_debug: Warming up for 3.0000 s
+Benchmarking custom_types_format_comparison/custom_types_debug: Collecting 100 samples in estimated 5.0018 s (9.4M iterations)
+Benchmarking custom_types_format_comparison/custom_types_debug: Analyzing
+custom_types_format_comparison/custom_types_debug
+                        time:   [531.26 ns 532.20 ns 533.21 ns]
+                        change: [+1.5744% +1.9201% +2.2541%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+Benchmarking custom_types_format_comparison/custom_types_display
+Benchmarking custom_types_format_comparison/custom_types_display: Warming up for 3.0000 s
+Benchmarking custom_types_format_comparison/custom_types_display: Collecting 100 samples in estimated 5.0007 s (14M iterations)
+Benchmarking custom_types_format_comparison/custom_types_display: Analyzing
+custom_types_format_comparison/custom_types_display
+                        time:   [369.49 ns 370.26 ns 371.18 ns]
+                        change: [+0.7819% +1.1071% +1.4188%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) low severe
+  5 (5.00%) low mild
+  1 (1.00%) high severe
+
+Benchmarking trait_overhead_comparison/primitive_to_le_bytes
+Benchmarking trait_overhead_comparison/primitive_to_le_bytes: Warming up for 3.0000 s
+Benchmarking trait_overhead_comparison/primitive_to_le_bytes: Collecting 100 samples in estimated 5.0000 s (2.3B iterations)
+Benchmarking trait_overhead_comparison/primitive_to_le_bytes: Analyzing
+trait_overhead_comparison/primitive_to_le_bytes
+                        time:   [2.2110 ns 2.2153 ns 2.2201 ns]
+                        change: [+0.7691% +1.0178% +1.2455%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+Benchmarking trait_overhead_comparison/trait_to_le_bytes
+Benchmarking trait_overhead_comparison/trait_to_le_bytes: Warming up for 3.0000 s
+Benchmarking trait_overhead_comparison/trait_to_le_bytes: Collecting 100 samples in estimated 5.0000 s (2.3B iterations)
+Benchmarking trait_overhead_comparison/trait_to_le_bytes: Analyzing
+trait_overhead_comparison/trait_to_le_bytes
+                        time:   [2.2218 ns 2.2268 ns 2.2338 ns]
+                        change: [+1.0832% +1.2878% +1.5051%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 4 outliers among 100 measurements (4.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking buffer_size_calculation/primitives_buffer_size
+Benchmarking buffer_size_calculation/primitives_buffer_size: Warming up for 3.0000 s
+Benchmarking buffer_size_calculation/primitives_buffer_size: Collecting 100 samples in estimated 5.0000 s (13B iterations)
+Benchmarking buffer_size_calculation/primitives_buffer_size: Analyzing
+buffer_size_calculation/primitives_buffer_size
+                        time:   [376.56 ps 377.28 ps 378.02 ps]
+                        change: [+0.8918% +1.2014% +1.4859%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+Benchmarking buffer_size_calculation/trait_buffer_size
+Benchmarking buffer_size_calculation/trait_buffer_size: Warming up for 3.0000 s
+Benchmarking buffer_size_calculation/trait_buffer_size: Collecting 100 samples in estimated 5.0000 s (13B iterations)
+Benchmarking buffer_size_calculation/trait_buffer_size: Analyzing
+buffer_size_calculation/trait_buffer_size
+                        time:   [374.73 ps 375.59 ps 376.46 ps]
+                        change: [+0.4386% +0.7426% +1.0363%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+

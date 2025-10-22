@@ -14,19 +14,31 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed};
 /// All primitive types (`u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`,
 /// `usize`, `isize`, `f32`, `f64`) automatically implement this trait.
 ///
-/// For custom types, implement `FixedSizeSerialize<N>`:
+/// For custom types, you can use the convenience macro or implement manually:
 ///
 /// ```rust
-/// use quicklog::serialize::FixedSizeSerialize;
+/// use quicklog::{impl_serializable_newtype, serialize::FixedSizeSerialize};
+/// use std::fmt;
 ///
+/// // Option 1: Use convenience macro (implements both traits)
 /// pub struct OrderId(u64);
+/// impl_serializable_newtype!(OrderId, u64, 8);
 ///
-/// impl FixedSizeSerialize<8> for OrderId {
+/// // Option 2: Manual implementation (more control)
+/// pub struct CustomId(u64);
+///
+/// impl FixedSizeSerialize<8> for CustomId {
 ///     fn to_le_bytes(&self) -> [u8; 8] {
 ///         self.0.to_le_bytes()
 ///     }
 ///     fn from_le_bytes(bytes: [u8; 8]) -> Self {
 ///         Self(u64::from_le_bytes(bytes))
+///     }
+/// }
+///
+/// impl fmt::Display for CustomId {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "CustomId({})", self.0)
 ///     }
 /// }
 /// ```
@@ -115,7 +127,40 @@ pub fn derive_selective_serialize(input: TokenStream) -> TokenStream {
     // Generate buffer size calculation
     let buffer_size_logic = generate_buffer_size_logic(&field_names, &field_types);
 
+    // Generate compile-time trait validation
+    let trait_checks = field_types.iter().map(|ty| {
+        if is_option_type(ty) {
+            let inner = extract_option_inner_type(ty).unwrap();
+            quote! {
+                const _: () = {
+                    fn assert_implements_traits<T, const N: usize>()
+                    where
+                        T: quicklog::serialize::FixedSizeSerialize<N>
+                    {}
+                    fn check() {
+                        assert_implements_traits::<#inner, { <#inner as quicklog::serialize::FixedSizeSerialize<_>>::BYTE_SIZE }>();
+                    }
+                };
+            }
+        } else {
+            quote! {
+                const _: () = {
+                    fn assert_implements_traits<T, const N: usize>()
+                    where
+                        T: quicklog::serialize::FixedSizeSerialize<N>
+                    {}
+                    fn check() {
+                        assert_implements_traits::<#ty, { <#ty as quicklog::serialize::FixedSizeSerialize<_>>::BYTE_SIZE }>();
+                    }
+                };
+            }
+        }
+    });
+
     let expanded = quote! {
+        // Compile-time validation that all marked fields implement required traits
+        #(#trait_checks)*
+
         impl quicklog::serialize::Serialize for #struct_name {
             fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (quicklog::serialize::Store<'buf>, &'buf mut [u8]) {
                 let total_size = self.buffer_size_required();
@@ -128,15 +173,15 @@ pub fn derive_selective_serialize(input: TokenStream) -> TokenStream {
             }
 
             fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+                use std::fmt::Write;
                 let mut offset = 0;
-                let mut parts = Vec::new();
+                let mut output = String::with_capacity(128);
+                let mut first = true;
 
                 #decode_logic
 
-                let formatted = parts.join(" ");
                 let remaining = &read_buf[offset..];
-
-                (formatted, remaining)
+                (output, remaining)
             }
 
             fn buffer_size_required(&self) -> usize {
@@ -218,10 +263,18 @@ fn generate_decode_field(field_name_str: &str, field_type: &syn::Type) -> proc_m
                 let value = <#inner_type as quicklog::serialize::FixedSizeSerialize<_>>::from_le_bytes(
                     read_buf[offset..offset + byte_size].try_into().unwrap()
                 );
-                parts.push(format!("{}={}", #field_name_str, value));
+                if !first {
+                    write!(output, " ").unwrap();
+                }
+                write!(output, "{}={}", #field_name_str, value).unwrap();
+                first = false;
                 offset += byte_size;
             } else {
-                parts.push(format!("{}=None", #field_name_str));
+                if !first {
+                    write!(output, " ").unwrap();
+                }
+                write!(output, "{}=None", #field_name_str).unwrap();
+                first = false;
             }
         }
     } else {
@@ -231,7 +284,11 @@ fn generate_decode_field(field_name_str: &str, field_type: &syn::Type) -> proc_m
             let value = <#field_type as quicklog::serialize::FixedSizeSerialize<_>>::from_le_bytes(
                 read_buf[offset..offset + byte_size].try_into().unwrap()
             );
-            parts.push(format!("{}={}", #field_name_str, value));
+            if !first {
+                write!(output, " ").unwrap();
+            }
+            write!(output, "{}={}", #field_name_str, value).unwrap();
+            first = false;
             offset += byte_size;
         }
     }

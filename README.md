@@ -47,11 +47,8 @@ fn main() {
 
     let some_var = 10;
 
-    // clones some_var, defers formatting to flush time
+    // copies some_var (primitive - fast!), defers formatting to flush time
     info!("value of some_var: {}", some_var);
-
-    // NEW: Use ^ prefix in format args for ultra-fast serialization
-    info!("value of some_var: {}", ^some_var);
 
     // flushes everything in queue
     flush!();
@@ -140,11 +137,11 @@ info!(
 
 ### Utilising `Serialize`
 
-In order to avoid cloning a large struct, you can implement the `Serialize` trait.
+In order to avoid cloning a large struct, you can implement the `Serialize` trait manually.
 
-This allows you to copy specific parts of your struct onto a circular byte buffer and avoid copying the rest by encoding providing a function to decode your struct from a byte buffer.
+This allows you to copy specific parts of your struct onto a circular byte buffer and avoid copying the rest by providing a function to decode your struct from a byte buffer.
 
-For a complete example, refer to `~/quicklog/benches/logger_benchmark.rs`.
+For a complete example, refer to `~/quicklog/benches/logger_benchmark.rs` or `~/quicklog/examples/macros.rs`.
 
 ```rust
 use quicklog::serialize::{Serialize, Store};
@@ -154,8 +151,22 @@ struct SomeStruct {
 }
 
 impl Serialize for SomeStruct {
-   fn encode(&self, write_buf: &'static mut [u8]) -> Store { /* some impl */ }
-   fn buffer_size_required(&self) -> usize { /* some impl */ }
+    fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
+        let size = self.buffer_size_required();
+        let (chunk, rest) = write_buf.split_at_mut(size);
+        chunk.copy_from_slice(&self.num.to_le_bytes());
+        (Store::new(Self::decode, chunk), rest)
+    }
+
+    fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+        let (chunk, rest) = read_buf.split_at(std::mem::size_of::<i64>());
+        let num = i64::from_le_bytes(chunk.try_into().unwrap());
+        (format!("{}", num), rest)
+    }
+
+    fn buffer_size_required(&self) -> usize {
+        std::mem::size_of::<i64>()
+    }
 }
 
 fn main() {
@@ -164,41 +175,55 @@ fn main() {
 }
 ```
 
+**Note:** For most use cases, prefer using `#[derive(SerializeSelective)]` with `#[serialize]` attributes instead of manually implementing `Serialize`. Manual implementation is only needed for complex custom serialization logic.
+
 ## High-Performance Selective Serialization
 
 For maximum performance, quicklog provides **selective field serialization** that allows you to serialize only specific fields from large structs, achieving **111x faster encoding** than Debug formatting.
 
 ### Using FixedSizeSerialize for Custom Types
 
-For maximum convenience, quicklog provides macros that automatically implement the `FixedSizeSerialize` trait for common patterns:
+For maximum convenience, quicklog provides macros that automatically implement the `FixedSizeSerialize` trait and `Display` for common patterns:
 
 #### Easy Implementation with Macros
 
 ```rust
-use quicklog::{impl_fixed_size_serialize_newtype, impl_fixed_size_serialize_enum};
+use quicklog::{impl_serializable_newtype, impl_fixed_size_serialize_enum};
+use std::fmt;
 
-// Simple wrapper types
+// Simple wrapper types - implements both FixedSizeSerialize AND Display
 pub struct OrderId(u64);
-impl_fixed_size_serialize_newtype!(OrderId, u64, 8);
+impl_serializable_newtype!(OrderId, u64, 8);
 
 pub struct Price(f64);
-impl_fixed_size_serialize_newtype!(Price, f64, 8);
+impl_serializable_newtype!(Price, f64, 8);
 
 pub struct Timestamp(u64);
-impl_fixed_size_serialize_newtype!(Timestamp, u64, 8);
+impl_serializable_newtype!(Timestamp, u64, 8);
 
-// Enums with discriminants
+// Enums with discriminants (requires manual Display implementation)
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum Side { Buy = 0, Sell = 1 }
 impl_fixed_size_serialize_enum!(Side, Buy = 0, Sell = 1);
+
+impl fmt::Display for Side {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Side::Buy => write!(f, "Buy"),
+            Side::Sell => write!(f, "Sell"),
+        }
+    }
+}
 ```
 
 #### Manual Implementation (for complex cases)
 
-For types requiring custom serialization logic, implement the trait manually:
+For types requiring custom serialization logic, implement the trait manually. Note that `FixedSizeSerialize` requires `Display` to be implemented:
 
 ```rust
 use quicklog::FixedSizeSerialize;
+use std::fmt;
 
 // Complex type with custom serialization
 pub struct MarketId([u8; 16]); // Fixed-size string with padding
@@ -209,6 +234,13 @@ impl FixedSizeSerialize<16> for MarketId {
     }
     fn from_le_bytes(bytes: [u8; 16]) -> Self {
         Self(bytes)
+    }
+}
+
+impl fmt::Display for MarketId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Custom formatting logic
+        write!(f, "{}", std::str::from_utf8(&self.0).unwrap_or("<invalid>"))
     }
 }
 ```
@@ -258,22 +290,28 @@ fn main() {
 All primitive types automatically implement `FixedSizeSerialize`:
 - **Integers**: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `usize`, `isize`
 - **Floats**: `f32`, `f64`
+
+The `Serialize` trait is automatically implemented for:
+- **Strings**: `&str`
 - **Options**: `Option<T>` where `T: Serialize`
 
 ### Available Macros
 
-Quicklog provides two simple macros to eliminate boilerplate when implementing `FixedSizeSerialize`:
+Quicklog provides three simple macros to eliminate boilerplate:
 
-| Macro | Use Case | Example |
-|-------|----------|---------|
-| `impl_fixed_size_serialize_newtype!` | Simple wrapper types | `impl_fixed_size_serialize_newtype!(UserId, u64, 8);` |
-| `impl_fixed_size_serialize_enum!` | Unit enums | `impl_fixed_size_serialize_enum!(Status, Active = 1, Inactive = 0);` |
+| Macro | Use Case | Implements | Example |
+|-------|----------|------------|---------|
+| `impl_serializable_newtype!` | Simple wrapper types (recommended) | `FixedSizeSerialize` + `Display` | `impl_serializable_newtype!(UserId, u64, 8);` |
+| `impl_fixed_size_serialize_newtype!` | Wrapper types with custom Display | `FixedSizeSerialize` only | `impl_fixed_size_serialize_newtype!(UserId, u64, 8);` |
+| `impl_fixed_size_serialize_enum!` | Unit enums | `FixedSizeSerialize` only | `impl_fixed_size_serialize_enum!(Status, Active = 1, Inactive = 0);` |
 
 **Benefits of using macros:**
 - ✅ **Reduced boilerplate** - No need to write repetitive trait implementations
 - ✅ **Compile-time safety** - Automatic size calculations and type checks
 - ✅ **Consistency** - Uniform implementation patterns across your codebase
 - ✅ **Maintainability** - Easy to update if inner types change
+
+**Note:** Since `FixedSizeSerialize` requires `Display`, you must implement `Display` when using `impl_fixed_size_serialize_newtype!` or `impl_fixed_size_serialize_enum!`. Use `impl_serializable_newtype!` for convenience as it implements both traits.
 
 ### Utilising different flushing mechanisms
 

@@ -23,8 +23,8 @@ pub mod buffer;
 ///
 /// #[derive(Serialize)]
 /// struct SerializeStruct {
-///     a: usize,
-///     b: i32,
+///     a: &'static str,
+///     b: Option<&'static str>,
 ///     c: &'static str,
 /// }
 /// ```
@@ -68,6 +68,11 @@ pub trait Serialize {
 /// uses compile-time const generics to specify exact byte sizes, enabling
 /// significant performance optimizations.
 ///
+/// # Requirements
+///
+/// Types implementing this trait must also implement `Display` for formatting
+/// during the decode phase at flush time.
+///
 /// # Performance Benefits
 ///
 /// - **Compile-time size calculation**: Buffer sizes are computed at compile time
@@ -79,6 +84,7 @@ pub trait Serialize {
 ///
 /// ```rust
 /// use quicklog::serialize::FixedSizeSerialize;
+/// use std::fmt;
 ///
 /// pub struct OrderId(u64);
 ///
@@ -89,6 +95,12 @@ pub trait Serialize {
 ///
 ///     fn from_le_bytes(bytes: [u8; 8]) -> Self {
 ///         Self(u64::from_le_bytes(bytes))
+///     }
+/// }
+///
+/// impl fmt::Display for OrderId {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "{}", self.0)
 ///     }
 /// }
 /// ```
@@ -108,7 +120,7 @@ pub trait Serialize {
 ///     // ... other fields
 /// }
 /// ```
-pub trait FixedSizeSerialize<const N: usize> {
+pub trait FixedSizeSerialize<const N: usize>: std::fmt::Display {
     /// Convert to little-endian byte array.
     ///
     /// This method should produce a deterministic, fixed-size binary
@@ -183,15 +195,9 @@ macro_rules! gen_serialize {
     };
 }
 
-gen_serialize!(i32);
-gen_serialize!(i64);
-gen_serialize!(isize);
-gen_serialize!(f32);
-gen_serialize!(f64);
-gen_serialize!(u32);
-gen_serialize!(u64);
-gen_serialize!(u128);
-gen_serialize!(usize);
+// Primitive Serialize implementations removed - primitives should use
+// FixedSizeSerialize for selective serialization, or be logged unprefixed
+// for best performance (since they're Copy).
 
 /// Macro to generate `FixedSizeSerialize` implementations for primitive types.
 ///
@@ -236,16 +242,28 @@ impl_fixed_size_serialize! {
 /// This macro handles the common pattern of wrapper types that delegate
 /// to their inner type's `to_le_bytes()` and `from_le_bytes()` methods.
 ///
+/// **Note**: Since `FixedSizeSerialize` now requires `Display`, you must also implement
+/// `Display` separately. For convenience, consider using `impl_serializable_newtype!`
+/// which implements both traits.
+///
 /// # Example
 ///
 /// ```rust
-/// use quicklog::impl_fixed_size_serialize_newtype;
+/// use quicklog::{impl_fixed_size_serialize_newtype, impl_serializable_newtype};
+/// use std::fmt;
 ///
+/// // Recommended: Use impl_serializable_newtype! instead
 /// pub struct OrderId(u64);
-/// impl_fixed_size_serialize_newtype!(OrderId, u64, 8);
+/// impl_serializable_newtype!(OrderId, u64, 8);
 ///
+/// // Or implement Display manually if you need custom formatting
 /// pub struct Price(f64);
 /// impl_fixed_size_serialize_newtype!(Price, f64, 8);
+/// impl fmt::Display for Price {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         write!(f, "${:.2}", self.0)
+///     }
+/// }
 /// ```
 #[macro_export]
 macro_rules! impl_fixed_size_serialize_newtype {
@@ -262,15 +280,78 @@ macro_rules! impl_fixed_size_serialize_newtype {
     };
 }
 
+/// Macro to generate both `FixedSizeSerialize` and `Display` implementations for newtype wrappers.
+///
+/// This is a convenience macro that implements both required traits for selective serialization
+/// in a single invocation. It delegates to the inner type's implementations.
+///
+/// # Example
+///
+/// ```rust
+/// use quicklog::impl_serializable_newtype;
+///
+/// pub struct OrderId(u64);
+/// impl_serializable_newtype!(OrderId, u64, 8);
+/// // Now OrderId implements both FixedSizeSerialize<8> and Display
+///
+/// pub struct Price(f64);
+/// impl_serializable_newtype!(Price, f64, 8);
+/// ```
+///
+/// # Generated Code
+///
+/// This macro expands to:
+/// ```rust
+/// # pub struct OrderId(u64);
+/// impl quicklog::serialize::FixedSizeSerialize<8> for OrderId {
+///     fn to_le_bytes(&self) -> [u8; 8] {
+///         self.0.to_le_bytes()
+///     }
+///     fn from_le_bytes(bytes: [u8; 8]) -> Self {
+///         Self(u64::from_le_bytes(bytes))
+///     }
+/// }
+///
+/// impl std::fmt::Display for OrderId {
+///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+///         std::fmt::Display::fmt(&self.0, f)
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! impl_serializable_newtype {
+    ($wrapper:ty, $inner:ty, $size:expr) => {
+        impl $crate::serialize::FixedSizeSerialize<$size> for $wrapper {
+            fn to_le_bytes(&self) -> [u8; $size] {
+                self.0.to_le_bytes()
+            }
+
+            fn from_le_bytes(bytes: [u8; $size]) -> Self {
+                Self(<$inner>::from_le_bytes(bytes))
+            }
+        }
+
+        impl std::fmt::Display for $wrapper {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Display::fmt(&self.0, f)
+            }
+        }
+    };
+}
+
 /// Macro to generate `FixedSizeSerialize` implementations for enums.
 ///
 /// This macro handles unit enums with explicit discriminant values,
 /// serializing them as single bytes.
 ///
+/// **Note**: Since `FixedSizeSerialize` requires `Display`, you must also implement
+/// `Display` for your enum.
+///
 /// # Example
 ///
 /// ```rust
 /// use quicklog::impl_fixed_size_serialize_enum;
+/// use std::fmt;
 ///
 /// #[repr(u8)]
 /// #[derive(Clone, Copy)]
@@ -280,14 +361,14 @@ macro_rules! impl_fixed_size_serialize_newtype {
 /// }
 /// impl_fixed_size_serialize_enum!(Side, Buy = 0, Sell = 1);
 ///
-/// #[repr(u8)]
-/// #[derive(Clone, Copy)]
-/// pub enum OrderType {
-///     Market = 0,
-///     Limit = 1,
-///     Stop = 2,
+/// impl fmt::Display for Side {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         match self {
+///             Side::Buy => write!(f, "Buy"),
+///             Side::Sell => write!(f, "Sell"),
+///         }
+///     }
 /// }
-/// impl_fixed_size_serialize_enum!(OrderType, Market = 0, Limit = 1, Stop = 2);
 /// ```
 #[macro_export]
 macro_rules! impl_fixed_size_serialize_enum {
@@ -311,67 +392,8 @@ macro_rules! impl_fixed_size_serialize_enum {
     };
 }
 
-/// Generates a `Serialize` implementation for unit enums.
-///
-/// This macro creates a `Serialize` implementation for enums with unit variants
-/// (no associated data). It serializes the enum by converting its discriminant
-/// to a `u8` value and encoding it as a single byte.
-///
-/// The enum must have `#[repr(u8)]` to ensure consistent discriminant values
-/// and must have no more than 256 variants (0-255).
-///
-/// # Examples
-///
-/// ```rust
-/// use quicklog::gen_serialize_enum;
-///
-/// #[repr(u8)]
-/// #[derive(Clone, Copy)]
-/// enum Color {
-///     Red = 0,
-///     Green = 1,
-///     Blue = 2,
-/// }
-///
-/// gen_serialize_enum!(Color, Red, Green, Blue);
-/// ```
-///
-/// The macro takes the enum type as the first argument, followed by all
-/// its variant names. This is necessary to generate the string representation
-/// for the `decode` function.
-#[macro_export]
-macro_rules! gen_serialize_enum {
-    ($enum_type:ty, $($variant:ident),+) => {
-        impl $crate::serialize::Serialize for $enum_type {
-            fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
-                let discriminant = *self as u8;
-                let size = self.buffer_size_required();
-                let (x, rest) = write_buf.split_at_mut(size);
-                x.copy_from_slice(&discriminant.to_le_bytes());
-
-                ($crate::serialize::Store::new(Self::decode, x), rest)
-            }
-
-            fn decode(read_buf: &[u8]) -> (String, &[u8]) {
-                let (chunk, rest) = read_buf.split_at(std::mem::size_of::<u8>());
-                let discriminant = u8::from_le_bytes(chunk.try_into().unwrap());
-
-                let variant_name = match discriminant {
-                    $(
-                        x if x == <$enum_type>::$variant as u8 => stringify!($variant),
-                    )+
-                    _ => "UnknownVariant",
-                };
-
-                (variant_name.to_string(), rest)
-            }
-
-            fn buffer_size_required(&self) -> usize {
-                std::mem::size_of::<u8>()
-            }
-        }
-    };
-}
+// gen_serialize_enum! removed - use impl_fixed_size_serialize_enum! instead
+// for selective serialization with FixedSizeSerialize trait
 
 impl Serialize for &str {
     fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
@@ -463,140 +485,3 @@ pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store,
 
 #[cfg(test)]
 mod tests;
-
-
-/// Declarative macro for generating selective Serialize implementations
-///
-/// This provides a fallback when proc macros can't be used or for more complex scenarios.
-/// It generates a Serialize implementation that only includes specified fields.
-///
-/// # Example
-///
-/// ```rust
-/// use quicklog::serialize_selected_fields;
-///
-/// #[derive(Debug)]
-/// struct Order {
-///     pub oid: u64,
-///     pub cloid: Option<u64>,
-///     pub price: Option<f64>,
-///     pub size: f64,
-///     pub status: String,  // Not included in serialization
-/// }
-///
-/// serialize_selected_fields!(Order, {
-///     oid: u64,
-///     size: f64
-///     // Note: Option<T> types are not supported by this declarative macro
-///     // Use the proc macro #[derive(SerializeSelective)] instead for Option<T> support
-/// });
-/// ```
-#[macro_export]
-macro_rules! serialize_selected_fields {
-    ($struct_name:ty, { $($field:ident: $field_type:ty),* $(,)? }) => {
-        impl $crate::serialize::Serialize for $struct_name {
-            fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> ($crate::serialize::Store<'buf>, &'buf mut [u8]) {
-                let total_size = self.buffer_size_required();
-                let (chunk, rest) = write_buf.split_at_mut(total_size);
-                let mut offset = 0;
-
-                $(
-                    $crate::__encode_field_impl!(self.$field, chunk, offset, $field_type);
-                )*
-
-                ($crate::serialize::Store::new(Self::decode, chunk), rest)
-            }
-
-            fn decode(read_buf: &[u8]) -> (String, &[u8]) {
-                let mut offset = 0;
-                let mut parts = Vec::new();
-
-                $(
-                    $crate::__decode_field_impl!(stringify!($field), read_buf, offset, parts, $field_type);
-                )*
-
-                let formatted = parts.join(" ");
-                (formatted, &read_buf[offset..])
-            }
-
-            fn buffer_size_required(&self) -> usize {
-                let mut total = 0;
-                $(
-                    total += $crate::__field_size_impl!(self.$field, $field_type);
-                )*
-                total
-            }
-        }
-    };
-}
-
-/// Internal helper macro for encoding fields (handles Option<T> and direct types)
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __encode_field_impl {
-    // Handle Option<T> types
-    ($field:expr, $chunk:expr, $offset:expr, Option<$inner:ty>) => {
-        if let Some(ref value) = $field {
-            $chunk[$offset] = 1; // Some marker
-            $offset += 1;
-            let bytes = value.to_le_bytes();
-            $chunk[$offset..$offset + bytes.len()].copy_from_slice(&bytes);
-            $offset += bytes.len();
-        } else {
-            $chunk[$offset] = 0; // None marker
-            $offset += 1;
-        }
-    };
-    // Handle direct types that implement to_le_bytes
-    ($field:expr, $chunk:expr, $offset:expr, $field_type:ty) => {
-        let bytes = $field.to_le_bytes();
-        $chunk[$offset..$offset + bytes.len()].copy_from_slice(&bytes);
-        $offset += bytes.len();
-    };
-}
-
-/// Internal helper macro for decoding fields
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __decode_field_impl {
-    // Handle Option<T> types
-    ($field_name:expr, $read_buf:expr, $offset:expr, $parts:expr, Option<$inner:ty>) => {
-        let has_value = $read_buf[$offset] != 0;
-        $offset += 1;
-        if has_value {
-            let value = <$inner>::from_le_bytes(
-                $read_buf[$offset..$offset + std::mem::size_of::<$inner>()]
-                    .try_into()
-                    .unwrap(),
-            );
-            $parts.push(format!("{}={}", $field_name, value));
-            $offset += std::mem::size_of::<$inner>();
-        } else {
-            $parts.push(format!("{}=None", $field_name));
-        }
-    };
-    // Handle direct types
-    ($field_name:expr, $read_buf:expr, $offset:expr, $parts:expr, $field_type:ty) => {
-        let value = <$field_type>::from_le_bytes(
-            $read_buf[$offset..$offset + std::mem::size_of::<$field_type>()]
-                .try_into()
-                .unwrap(),
-        );
-        $parts.push(format!("{}={}", $field_name, value));
-        $offset += std::mem::size_of::<$field_type>();
-    };
-}
-
-/// Internal helper macro for calculating field sizes
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __field_size_impl {
-    // Handle Option<T> types
-    ($field:expr, Option<$inner:ty>) => {
-        1 + $field.map_or(0, |_| std::mem::size_of::<$inner>())
-    };
-    // Handle direct types
-    ($field:expr, $field_type:ty) => {
-        std::mem::size_of::<$field_type>()
-    };
-}

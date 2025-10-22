@@ -7,11 +7,7 @@ error[E0599]: the method `to_owned` exists for struct `SimpleStruct`, but its tr
   ::: tests/failures/../common/mod.rs
    |
    | pub(crate) struct SimpleStruct {
-   | ------------------------------
-   | |
-   | method `to_owned` not found for this struct
-   | doesn't satisfy `SimpleStruct: Clone`
-   | doesn't satisfy `SimpleStruct: ToOwned`
+   | ------------------------------ method `to_owned` not found for this struct because it doesn't satisfy `SimpleStruct: Clone` or `SimpleStruct: ToOwned`
    |
    = note: the following trait bounds were not satisfied:
            `SimpleStruct: Clone`
@@ -21,4 +17,5 @@ help: consider annotating `SimpleStruct` with `#[derive(Clone)]`
   --> tests/failures/../common/mod.rs
    |
     + #[derive(Clone)]
+    | pub(crate) struct SimpleStruct {
     |

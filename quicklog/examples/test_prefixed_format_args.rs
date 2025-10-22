@@ -1,27 +1,15 @@
-use quicklog::{flush_all, impl_fixed_size_serialize_newtype, info, init, SerializeSelective};
+use quicklog::{flush_all, impl_serializable_newtype, info, init, SerializeSelective};
 use quicklog_flush::stdout_flusher::StdoutFlusher;
-use std::fmt;
 
-// Define some custom types with FixedSizeSerialize
+// Define some custom types with FixedSizeSerialize using the convenience macro
 #[derive(Clone, Copy)]
 pub struct OrderId(u64);
-impl_fixed_size_serialize_newtype!(OrderId, u64, 8);
+impl_serializable_newtype!(OrderId, u64, 8);
 
-impl fmt::Display for OrderId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "OrderId({})", self.0)
-    }
-}
-
+// For custom Display formatting, you can still override manually
 #[derive(Clone, Copy)]
 pub struct Price(f64);
-impl_fixed_size_serialize_newtype!(Price, f64, 8);
-
-impl fmt::Display for Price {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "${:.2}", self.0)
-    }
-}
+impl_serializable_newtype!(Price, f64, 8);
 
 // Define a struct with selective serialization
 #[derive(SerializeSelective, Debug, Clone)]
@@ -45,13 +33,13 @@ fn main() {
     let size = 2.5f64;
     let filled_qty = 100u32;
 
-    // Test 1: All args with ^ prefix (serialize primitives)
+    // Test 1: Primitives without prefix (Copy types are fastest unprefixed)
     info!(
         "Order: id={}, price={}, size={}, filled_qty={}",
-        ^order_id,
-        ^price,
-        ^size,
-        ^filled_qty
+        order_id,
+        price,
+        size,
+        filled_qty
     );
 
     // Test 2: Mix of prefixes with struct
@@ -77,14 +65,14 @@ fn main() {
     // Test 4: Mix everything
     info!(
         "Mixed: {} {} {} {}",
-        ^order_id,
+        order_id,
         x,
         ?order,
         %order_id
     );
 
     // Test 5: With structured fields too
-    info!(?order, "Structured field with format args: {}", ^size);
+    info!(?order, "Structured field with format args: {}", size);
 
     // Test 6: Just to show custom types work with Display
     let custom_price = Price(999.99);

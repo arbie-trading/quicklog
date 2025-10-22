@@ -18,15 +18,20 @@ impl std::fmt::Display for S {
 
 impl Serialize for S {
     fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
-        self.i.encode(write_buf)
+        let size = self.buffer_size_required();
+        let (x, rest) = write_buf.split_at_mut(size);
+        x.copy_from_slice(&self.i.to_le_bytes());
+        (Store::new(Self::decode, x), rest)
     }
 
     fn decode(read_buf: &[u8]) -> (String, &[u8]) {
-        i32::decode(read_buf)
+        let (chunk, rest) = read_buf.split_at(std::mem::size_of::<i32>());
+        let x = i32::from_le_bytes(chunk.try_into().unwrap());
+        (format!("{}", x), rest)
     }
 
     fn buffer_size_required(&self) -> usize {
-        self.i.buffer_size_required()
+        std::mem::size_of::<i32>()
     }
 }
 
