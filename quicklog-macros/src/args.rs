@@ -15,12 +15,6 @@ pub(crate) type DotDelimitedIdent = Punctuated<Ident, Token![.]>;
 /// e.g. `my.name = ?debug_struct`, `%display_struct`
 pub(crate) type PrefixedFields = Punctuated<NamedField<PrefixedArg>, Token![,]>;
 
-/// Comma-separated sequence of `Expr`-based named fields
-/// e.g. `my.name = debug_struct`, `display_struct`
-/// Similar to `PrefixedFields`, but doesn't allow for prefixes for the
-/// main field argument
-pub(crate) type ExprFields = Punctuated<NamedField<Expr>, Token![,]>;
-
 /// Formatting argument with an optional prefix
 /// e.g. `?debug_struct`, `%display_struct`, `^serialize_struct`, `some_struct`
 #[derive(Clone)]
@@ -166,16 +160,16 @@ impl<T: Parse + ToTokens> ToTokens for NamedField<T> {
 ///     appended to the end of the format string.
 /// 2. Format string
 ///   - The format string, the same as that used in `format!`
-/// 3. Expression fields
-///   - These are the expressions that will be substituted into the format
-///     string, similar to how `format!` works.
+/// 3. Formatting args
+///   - These are the (optionally) prefixed expressions that will be substituted
+///     into the format string, similar to how `format!` works.
 pub(crate) struct Args {
     /// `?debug_struct`, `%display_struct`
     pub(crate) prefixed_fields: PrefixedFields,
     /// `"Hello World {some_data}"`
     pub(crate) format_string: Option<LitStr>,
-    /// `some_data = "me!"`
-    pub(crate) formatting_args: ExprFields,
+    /// `some_data = "me!"`, `^serialize_var`, `?debug_var`
+    pub(crate) formatting_args: PrefixedFields,
 }
 
 impl Parse for Args {
@@ -208,7 +202,7 @@ impl Parse for Args {
 
                 Punctuated::parse_separated_nonempty(input)?
             } else {
-                ExprFields::new()
+                PrefixedFields::new()
             };
 
             Ok(Self {
@@ -221,23 +215,23 @@ impl Parse for Args {
             Ok(Self {
                 prefixed_fields,
                 format_string: None,
-                formatting_args: ExprFields::new(),
+                formatting_args: PrefixedFields::new(),
             })
         }
     }
 }
 
-/// Replaces all expression arguments with a new set of expressions.
-/// e.g. for the expression field `a = &my_struct` and the new expression `x`,
+/// Replaces all expression arguments with a new set of identifiers.
+/// e.g. for the expression field `a = &my_struct` and the new identifier `x`,
 /// the field gets transformed to `a = &my_struct` -> `a = x`
 pub(crate) fn replace_fields_expr(
-    fields: &mut ExprFields,
-    to_replace: impl IntoIterator<Item = Expr>,
+    fields: &mut PrefixedFields,
+    to_replace: impl IntoIterator<Item = Ident>,
 ) {
     fields
         .iter_mut()
         .zip(to_replace)
         .for_each(|(field, replacement)| {
-            field.arg = replacement;
+            field.arg = PrefixedArg::Normal(Expr::Verbatim(replacement.to_token_stream()));
         });
 }

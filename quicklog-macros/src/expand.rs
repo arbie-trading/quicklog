@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Ident};
+use syn::{parse_macro_input, Ident};
 
 use crate::args::{replace_fields_expr, Args, PrefixedArg};
 use crate::Level;
@@ -17,6 +17,7 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     let args_traits_check: Vec<_> = args
         .prefixed_fields
         .iter()
+        .chain(args.formatting_args.iter())
         .filter_map(|arg| match &arg.arg {
             PrefixedArg::Debug(a) => Some(quote! { debug_check(&#a); }),
             PrefixedArg::Display(a) => Some(quote! { display_check(&#a); }),
@@ -31,7 +32,7 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     let mut fmt_args = args.formatting_args;
     replace_fields_expr(
         &mut fmt_args,
-        fmt_arg_idents.into_iter().map(|ident| parse_quote!(#ident)),
+        fmt_arg_idents.iter().cloned(),
     );
 
     let fmt_str = args
@@ -94,7 +95,19 @@ fn convert_args_to_idents(args: &Args) -> (TokenStream2, Vec<Ident>, Vec<Ident>)
 
     let mut fmt_arg_idents = Vec::with_capacity(args.formatting_args.len());
     for fmt_arg in args.formatting_args.iter() {
-        args_to_own.push(fmt_arg.arg.to_token_stream());
+        // Handle prefixes for format args
+        match &fmt_arg.arg {
+            PrefixedArg::Serialize(i) => args_to_own.push(quote! {
+                quicklog::make_store!(#i)
+            }),
+            PrefixedArg::Debug(i) => args_to_own.push(quote! {
+                format!("{:?}", #i)
+            }),
+            PrefixedArg::Display(i) => args_to_own.push(quote! {
+                format!("{}", #i)
+            }),
+            PrefixedArg::Normal(i) => args_to_own.push(i.to_token_stream()),
+        }
         fmt_arg_idents.push(new_ident());
     }
 

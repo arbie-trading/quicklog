@@ -50,8 +50,8 @@ fn main() {
     // clones some_var, defers formatting to flush time
     info!("value of some_var: {}", some_var);
 
-    // serializes some_var to byte buffer at callsite (fastest)
-    info!(^some_var, "value of some_var");
+    // NEW: Use ^ prefix in format args for ultra-fast serialization
+    info!("value of some_var: {}", ^some_var);
 
     // flushes everything in queue
     flush!();
@@ -62,38 +62,49 @@ fn main() {
 
 Quicklog provides multiple ways to log values with different performance characteristics:
 
-#### Format String Arguments (Deferred Formatting)
+#### Format String Arguments
+
+You can use prefixes **directly in format arguments** for fine-grained control over performance:
 
 ```rust
-info!("Value: {}", some_var);        // Clone at callsite, format at flush (~28-104ns)
-info!("Debug: {:?}", some_struct);   // Clone at callsite, Debug format at flush (~28-104ns)
-info!("Display: {}", some_struct);   // Clone at callsite, Display format at flush (~28-104ns)
-```
+// Serialize arguments (fastest: ~5-10ns per arg)
+info!("Order: id={}, price={}, size={}", ^order_id, ^price, ^size);
 
-**What happens:** The value is cloned and captured in a closure. Formatting happens later during `flush!()`, keeping the hot path fast.
+// Mix different strategies in one call
+info!("Data: {} {} {}", ^serialized, cloned_var, %display_var);
 
-#### Structured Field Prefixes (Eager Formatting)
-
-```rust
-info!(?some_var, "message");         // Debug format at callsite (~600ns)
-info!(%some_var, "message");         // Display format at callsite (~600ns)
-info!(^some_var, "message");         // Serialize to bytes at callsite (~5-10ns, requires Serialize trait)
+// Unprefixed args (clone and defer formatting: ~28-104ns)
+info!("Value: {}", some_var);
+info!("Debug: {:?}", some_struct);
 ```
 
 **What happens:**
-- `?prefix` → Immediately calls `format!("{:?}", value)` and captures the String
-- `%prefix` → Immediately calls `format!("{}", value)` and captures the String
-- `^prefix` → Copies specific bytes to buffer (requires implementing `Serialize` trait)
+- `^arg` → Serializes to bytes at callsite (~5-10ns, requires `Serialize` trait)
+- `arg` (no prefix) → Clones and defers formatting to flush time (~28-104ns)
+- `%arg` → Eagerly formats with Display at callsite (~600ns)
+- `?arg` → Eagerly formats with Debug at callsite (~600ns)
+
+#### Structured Field Syntax
+
+Alternatively, you can use structured fields that get appended after the message:
+
+```rust
+info!(?some_var, %other_var, "message");
+// Output: "message some_var=<debug> other_var=<display>"
+
+info!(^serialized, "message");
+// Output: "message serialized=<value>"
+```
 
 #### Performance Comparison
 
 | Syntax | Call Site Latency | When to Use |
 |--------|------------------|-------------|
-| `^var` (Serialize) | **~5-10ns** | High-frequency logging, hot paths |
+| `"text {}", ^var` | **~5-10ns** | High-frequency logging, hot paths |
 | `"text {}", var` | **~28-104ns** | General purpose, good balance |
-| `?var` or `%var` | **~600ns** | Debugging, non-critical paths |
+| `"text {}", %var` or `?var` | **~600ns** | Debugging, non-critical paths |
 
-**Recommendation:** Use `^` prefix with `Serialize` for maximum performance, or format string arguments (`{}`) for a good balance of convenience and speed. Avoid `?` and `%` prefixes in performance-critical code.
+**Recommendation:** Use `^` prefix in format strings for maximum performance on hot paths, unprefixed args for convenience, and `%`/`?` only when you need immediate formatting (debugging).
 
 ### Utilising `Serialize`
 
