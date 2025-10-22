@@ -47,16 +47,53 @@ fn main() {
 
     let some_var = 10;
 
-    // formats some_var at callsite
+    // clones some_var, defers formatting to flush time
     info!("value of some_var: {}", some_var);
 
-    // defers formatting, only serializes at callsite
+    // serializes some_var to byte buffer at callsite (fastest)
     info!(^some_var, "value of some_var");
 
     // flushes everything in queue
     flush!();
 }
 ```
+
+### Logging Syntax and Performance
+
+Quicklog provides multiple ways to log values with different performance characteristics:
+
+#### Format String Arguments (Deferred Formatting)
+
+```rust
+info!("Value: {}", some_var);        // Clone at callsite, format at flush (~28-104ns)
+info!("Debug: {:?}", some_struct);   // Clone at callsite, Debug format at flush (~28-104ns)
+info!("Display: {}", some_struct);   // Clone at callsite, Display format at flush (~28-104ns)
+```
+
+**What happens:** The value is cloned and captured in a closure. Formatting happens later during `flush!()`, keeping the hot path fast.
+
+#### Structured Field Prefixes (Eager Formatting)
+
+```rust
+info!(?some_var, "message");         // Debug format at callsite (~600ns)
+info!(%some_var, "message");         // Display format at callsite (~600ns)
+info!(^some_var, "message");         // Serialize to bytes at callsite (~5-10ns, requires Serialize trait)
+```
+
+**What happens:**
+- `?prefix` → Immediately calls `format!("{:?}", value)` and captures the String
+- `%prefix` → Immediately calls `format!("{}", value)` and captures the String
+- `^prefix` → Copies specific bytes to buffer (requires implementing `Serialize` trait)
+
+#### Performance Comparison
+
+| Syntax | Call Site Latency | When to Use |
+|--------|------------------|-------------|
+| `^var` (Serialize) | **~5-10ns** | High-frequency logging, hot paths |
+| `"text {}", var` | **~28-104ns** | General purpose, good balance |
+| `?var` or `%var` | **~600ns** | Debugging, non-critical paths |
+
+**Recommendation:** Use `^` prefix with `Serialize` for maximum performance, or format string arguments (`{}`) for a good balance of convenience and speed. Avoid `?` and `%` prefixes in performance-critical code.
 
 ### Utilising `Serialize`
 
