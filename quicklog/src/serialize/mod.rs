@@ -446,7 +446,9 @@ where
             None => 1,                                           // just the marker
         }
     }
-    /// Blanket implementation of Serialize for Vec<T> where T implements Serialize
+}
+
+/// Blanket implementation of Serialize for Vec<T> where T implements Serialize
 impl<T> Serialize for Vec<T>
 where
     T: Serialize,
