@@ -1,6 +1,6 @@
 # quicklog
 
-Ultra-fast single-threaded logging framework with **selective field serialization**. Achieves **111x performance improvement** over Debug formatting for complex structs, and almost 200x faster than `tracing` and `delog` for large structs.
+Ultra-fast single-threaded logging framework with **selective field serialization** and **optimized collection logging**. Achieves **111x performance improvement** over Debug formatting for complex structs, **2-85× faster than cloning** for `Vec<T>`, and almost 200x faster than `tracing` and `delog` for large structs.
 
 Supports standard logging macros like `trace!`, `debug!`, `info!`, `warn!` and `error!`.
 
@@ -39,21 +39,21 @@ quicklog = "0.2"
 use quicklog::{info, init, flush};
 
 fn main() {
-    // initialise required resources, called near application entry point
+    // Initialize required resources
     init!();
 
-    // adds item to logging queue
+    // Simple logging
     info!("hello world");
 
-    let some_var = 10;
+    // Logging primitives (no prefix is fastest)
+    let price = 100.5;
+    info!("Price: {}", price);  // ~1-2ns
 
-    // clones some_var, defers formatting to flush time
-    info!("value of some_var: {}", some_var);
+    // Logging structs (use ^ prefix for best performance)
+    let order = Order { id: 123, size: 10.0 };
+    info!("Order: {}", ^order);  // ~5-10ns with SerializeSelective
 
-    // NEW: Use ^ prefix in format args for ultra-fast serialization
-    info!("value of some_var: {}", ^some_var);
-
-    // flushes everything in queue
+    // Flush all log messages
     flush!();
 }
 ```
@@ -67,15 +67,17 @@ Quicklog provides multiple ways to log values with different performance charact
 You can use prefixes **directly in format arguments** for fine-grained control over performance:
 
 ```rust
-// Serialize arguments (fastest: ~5-10ns per arg)
-info!("Order: id={}, price={}, size={}", ^order_id, ^price, ^size);
+// For primitives: no prefix is fastest (~1-2ns)
+info!("Order: id={}, price={}, size={}", order_id, price, size);
 
-// Mix different strategies in one call
-info!("Data: {} {} {}", ^serialized, cloned_var, %display_var);
+// For structs: use ^ prefix (~5-10ns with selective serialization)
+info!("Order created: {}", ^order);
 
-// Unprefixed args (clone and defer formatting: ~28-104ns)
-info!("Value: {}", some_var);
-info!("Debug: {:?}", some_struct);
+// Mix strategies based on type
+info!("Fill: order={}, price={}, qty={}", ^order, price, qty);
+
+// Unprefixed structs (clone entire struct: ~28-104ns)
+info!("Order: {:?}", order_struct);
 ```
 
 **What happens:**
@@ -108,9 +110,13 @@ info!(^serialized, "message");
 | `"text {}", %var` or `?var` | **~600ns** | Debugging, non-critical paths - eager formatting |
 
 **Recommendation:**
-- For **primitives**: Use unprefixed args (fastest at ~1-2ns)
-- For **structs**: Use `^` prefix with `Serialize` trait (~5-10ns vs ~28-104ns for cloning)
-- For **debugging**: Use `%` or `?` when you need immediate formatting
+- **Use no prefix** for: primitives (`u32`, `f64`, `i32`, etc.) → **fastest at ~1-2ns**
+- **Use `^` (Serialize)** for:
+  - Structs with `#[derive(SerializeSelective)]` → **6-111× faster than clone**
+  - `Vec<String>` or `Vec<ComplexStruct>` → **2-85× faster than clone**
+  - Heap-allocated types in collections
+- **Avoid `^` for**: `Vec` of primitives (slower than clone for 50+ elements)
+- **Use `%`/`?`** only when: debugging, non-critical paths, immediate formatting needed
 
 #### Example: Optimal Usage
 
@@ -138,13 +144,50 @@ info!(
 );
 ```
 
-### Utilising `Serialize`
 
-In order to avoid cloning a large struct, you can implement the `Serialize` trait.
+### Logging Collections with High Performance
 
-This allows you to copy specific parts of your struct onto a circular byte buffer and avoid copying the rest by encoding providing a function to decode your struct from a byte buffer.
+Quicklog automatically serializes common collections like `Vec<T>` and `Option<T>`:
 
-For a complete example, refer to `~/quicklog/benches/logger_benchmark.rs`.
+```rust
+use quicklog::{info, init, flush_all};
+
+fn main() {
+    init!();
+
+    // Vec of strings (2.6× faster than cloning)
+    let symbols: Vec<&str> = vec!["AAPL", "GOOGL", "MSFT"];
+    info!("Symbols: {}", ^symbols);  // Use ^ for heap types
+
+    // Vec of primitives (no prefix is faster)
+    let prices: Vec<f64> = vec![100.5, 101.2, 99.8, 102.1];
+    info!("Prices: {:?}", prices);  // No ^ for primitives
+
+    // Vec of complex structs (6-7× faster with ^)
+    let orders: Vec<Order> = get_orders();
+    info!("Orders: {}", ^orders);  // Use ^ for structs
+
+    // Nested collections
+    let data: Vec<Option<i32>> = vec![Some(10), None, Some(20)];
+    info!("Data: {}", ^data);  // Output: [Some(10), None, Some(20)]
+
+    flush_all!();
+}
+```
+
+**Performance benefits for Vec (use `^` prefix):**
+- **Vec<&str> or Vec<String>**: 2-3× faster than clone (avoids heap allocations)
+- **Vec<ComplexStruct>**: 6-7× faster with selective serialization
+- **Vec<SelectiveOrder>**: Up to 85× faster for large structs
+
+**When NOT to use `^`:**
+- **Vec of primitives** (`Vec<u32>`, `Vec<f64>`): Clone is faster for 50+ elements
+
+See [Vec benchmark results](VEC_BENCHMARK_RESULTS.md) for detailed performance analysis.
+
+### Implementing Custom `Serialize`
+
+For custom types, implement the `Serialize` trait to control exactly what gets serialized:
 
 ```rust
 use quicklog::serialize::{Serialize, Store};
@@ -163,6 +206,10 @@ fn main() {
     info!("some struct: {}", ^s);
 }
 ```
+
+For complete examples, refer to:
+- `quicklog/examples/vec_serialization.rs` - Vec examples
+- `quicklog/benches/logger_benchmark.rs` - Custom implementations
 
 ## High-Performance Selective Serialization
 
@@ -255,10 +302,13 @@ fn main() {
 
 ### Built-in Support
 
-All primitive types automatically implement `FixedSizeSerialize`:
+All primitive types and common collections automatically implement `Serialize`:
 - **Integers**: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `usize`, `isize`
 - **Floats**: `f32`, `f64`
-- **Options**: `Option<T>` where `T: Serialize`
+- **Strings**: `&str`
+- **Collections**: `Option<T>`, `Vec<T>` where `T: Serialize`
+
+All primitive types also implement `FixedSizeSerialize` for use with selective serialization.
 
 ### Available Macros
 
@@ -305,6 +355,7 @@ fn main() {
 
 More usage examples are available:
 - [Basic usage](quicklog/examples/macros.rs)
+- [Vec and collection logging](quicklog/examples/vec_serialization.rs)
 - [High-performance selective serialization](quicklog/examples/custom_types_selective_serialization.rs)
 
 ## Benchmark
@@ -350,6 +401,34 @@ Measurements are made on a 2020 16 core M1 Macbook Air with 16 GB RAM.
 | tracing  | 627.79 µs     | 629.91 µs     | 632.06 µs     |
 | delog    | 719.54 µs     | 721.19 µs     | 722.96 µs     |
 
+### 🚀 Vec Serialization Performance (NEW)
+
+**Serialize vs Clone comparison for `Vec<T>` logging:**
+
+| Vec Type | Elements | Clone (no prefix) | Serialize (^ prefix) | Speedup |
+| -------- | -------- | ----------------- | -------------------- | ------- |
+| `Vec<String>` | 10 | 235.02 ns | **88.98 ns** | **2.64× faster** ✅ |
+| `Vec<String>` | 100 | 1,902.9 ns | **805.99 ns** | **2.36× faster** ✅ |
+| `Vec<Order>` | 10 | 761.44 ns | **123.41 ns** | **6.17× faster** ✅ |
+| `Vec<Order>` | 100 | 7,109.2 ns | **1,077.5 ns** | **6.58× faster** ✅ |
+| `Vec<SelectiveOrder>` | 10 | 967.98 ns | **31.41 ns** | **30.8× faster** ✅ |
+| `Vec<SelectiveOrder>` | 100 | 9,336.9 ns | **109.43 ns** | **85.3× faster** ✅ |
+| `Vec<u32>` | 10 | 40.9 ns | 33.4 ns | 1.2× faster ⚠️ |
+| `Vec<u32>` | 100 | **68.6 ns** | 126.2 ns | **Clone wins** ⚠️ |
+
+**When to use `^` for Vec:**
+- ✅ **Heap-allocated elements**: `Vec<String>`, `Vec<Box<T>>` → 2-3× faster
+- ✅ **Complex structs**: `Vec<Order>` with multiple fields → 6-7× faster
+- ✅ **Selective serialization**: `Vec<SelectiveOrder>` → 30-85× faster
+- ⚠️ **Primitive elements**: `Vec<u32>`, `Vec<f64>` → Clone is faster for 50+ elements
+
+**Real-world impact:**
+- **High-frequency trading**: Logging 1M orders/sec saves **730ms CPU time** with selective serialization
+- **Market data**: 100 symbols @ 100Hz saves **109μs/sec** with Vec<String> serialization
+- **Collection logging**: Best gains with heap-allocated and complex types
+
+For detailed benchmarks, see [VEC_BENCHMARK_RESULTS.md](VEC_BENCHMARK_RESULTS.md).
+
 ## Contribution & Support
 
 We are open to contributions and requests!
@@ -360,6 +439,7 @@ Please post your bug reports or feature requests on [Github Issues](https://gith
 
 - [x] **High-performance selective field serialization** (NEW in 0.2.1)
 - [x] **FixedSizeSerialize trait for custom types** (NEW in 0.2.1)
+- [x] **Vec<T> serialization with 2-85× speedup** (NEW in 0.2.2)
 - [] add single-threaded and multi-threaded variants
 - [] Try to remove nested `lazy_format` in recursion
 - [] Check number of copies of data made in each log line and possibly reduce it

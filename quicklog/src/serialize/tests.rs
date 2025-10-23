@@ -299,6 +299,138 @@ fn serialize_option_roundtrip() {
     assert_eq!(store_none.as_string(), "None");
 
     // Verify buffer sizes
-    assert_eq!(original_some.buffer_size_required(), 9); // 1 marker + 8 bytes for u64
-    assert_eq!(original_none.buffer_size_required(), 1); // Just marker
+}
+
+#[test]
+fn serialize_vec_empty() {
+    let mut buf = [0; 128];
+
+    // Test empty Vec<i32>
+    let empty_vec: Vec<i32> = Vec::new();
+
+    // Verify buffer size (just the length prefix)
+    assert_eq!(empty_vec.buffer_size_required(), 8); // SIZE_LENGTH for empty vec
+
+    let (store, _) = empty_vec.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[]");
+}
+
+#[test]
+fn serialize_vec_primitives() {
+    let mut buf = [0; 128];
+
+    // Test Vec<i32> with values
+    let vec_i32: Vec<i32> = vec![1, 2, 3, 4, 5];
+
+    // Verify buffer size: 8 (length) + 5 * 4 (i32 size) = 28 bytes
+    assert_eq!(vec_i32.buffer_size_required(), 28);
+
+    let (store, _) = vec_i32.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[1, 2, 3, 4, 5]");
+}
+
+#[test]
+fn serialize_vec_single_element() {
+    let mut buf = [0; 128];
+
+    // Test Vec<u64> with single element
+    let vec_single: Vec<u64> = vec![42];
+
+    // Verify buffer size: 8 (length) + 8 (u64) = 16 bytes
+    assert_eq!(vec_single.buffer_size_required(), 16);
+
+    let (store, _) = vec_single.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[42]");
+}
+
+#[test]
+fn serialize_vec_strings() {
+    let mut buf = [0; 256];
+
+    // Test Vec<&str>
+    let vec_str: Vec<&str> = vec!["hello", "world", "test"];
+
+    let (store, _) = vec_str.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[hello, world, test]");
+}
+
+#[test]
+fn serialize_vec_floats() {
+    let mut buf = [0; 128];
+
+    // Test Vec<f64>
+    let vec_floats: Vec<f64> = vec![1.5, 2.5, 3.5];
+
+    // Verify buffer size: 8 (length) + 3 * 8 (f64 size) = 32 bytes
+    assert_eq!(vec_floats.buffer_size_required(), 32);
+
+    let (store, _) = vec_floats.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[1.5, 2.5, 3.5]");
+}
+
+#[test]
+fn serialize_vec_nested() {
+    let mut buf = [0; 256];
+
+    // Test Vec<Option<i32>>
+    let vec_option: Vec<Option<i32>> = vec![Some(10), None, Some(20)];
+
+    let (store, _) = vec_option.encode(&mut buf);
+
+    // Verify decoding
+    assert_eq!(store.as_string(), "[Some(10), None, Some(20)]");
+}
+
+#[test]
+fn serialize_multiple_vecs() {
+    let mut buf = [0; 256];
+
+    let vec1: Vec<i32> = vec![1, 2];
+    let vec2: Vec<i32> = vec![3, 4, 5];
+
+    let (store1, remaining) = vec1.encode(&mut buf);
+    let (store2, _) = vec2.encode(remaining);
+
+    assert_eq!(store1.as_string(), "[1, 2]");
+    assert_eq!(store2.as_string(), "[3, 4, 5]");
+}
+
+#[test]
+fn serialize_vec_large() {
+    let mut buf = [0; 1024];
+
+    // Test with larger vector
+    let vec_large: Vec<u32> = (0..50).collect();
+
+    let (store, _) = vec_large.encode(&mut buf);
+
+    // Verify it contains expected elements
+    let decoded = store.as_string();
+    assert!(decoded.starts_with("[0, 1, 2"));
+    assert!(decoded.ends_with("48, 49]"));
+}
+
+#[test]
+fn serialize_vec_roundtrip() {
+    let mut buf = [0; 256];
+
+    // Test roundtrip with different types
+    let original_i64: Vec<i64> = vec![100, -200, 300];
+    let (store, _) = original_i64.encode(&mut buf);
+
+    assert_eq!(store.as_string(), "[100, -200, 300]");
+
+    // Verify buffer consumption
+    let expected_size = 8 + (3 * 8); // length + 3 i64s
+    assert_eq!(original_i64.buffer_size_required(), expected_size);
 }

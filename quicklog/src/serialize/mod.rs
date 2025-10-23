@@ -446,6 +446,60 @@ where
             None => 1,                                           // just the marker
         }
     }
+    /// Blanket implementation of Serialize for Vec<T> where T implements Serialize
+impl<T> Serialize for Vec<T>
+where
+    T: Serialize,
+{
+    fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
+        let total_size = self.buffer_size_required();
+        let (chunk, rest) = write_buf.split_at_mut(total_size);
+
+        // Write length as usize (8 bytes on 64-bit platforms)
+        let len_bytes = self.len().to_le_bytes();
+        chunk[0..SIZE_LENGTH].copy_from_slice(&len_bytes);
+
+        // Encode each element sequentially after the length
+        let mut offset = SIZE_LENGTH;
+        for item in self.iter() {
+            let (_, _remaining) = item.encode(&mut chunk[offset..]);
+            let item_size = item.buffer_size_required();
+            offset += item_size;
+        }
+
+        (Store::new(Self::decode, chunk), rest)
+    }
+
+    fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+        // Read the length from the first SIZE_LENGTH bytes
+        let len_bytes: [u8; SIZE_LENGTH] = read_buf[0..SIZE_LENGTH].try_into().unwrap();
+        let len = usize::from_le_bytes(len_bytes);
+
+        let mut offset = SIZE_LENGTH;
+        let mut elements = Vec::with_capacity(len);
+
+        // Decode each element
+        for _ in 0..len {
+            let (elem_string, remaining) = T::decode(&read_buf[offset..]);
+            elements.push(elem_string);
+            // Calculate how many bytes were consumed
+            offset = read_buf.len() - remaining.len();
+        }
+
+        // Format as a comma-separated list in brackets
+        let formatted = if elements.is_empty() {
+            "[]".to_string()
+        } else {
+            format!("[{}]", elements.join(", "))
+        };
+
+        (formatted, &read_buf[offset..])
+    }
+
+    fn buffer_size_required(&self) -> usize {
+        // Size for length prefix + sum of all element sizes
+        SIZE_LENGTH + self.iter().map(|item| item.buffer_size_required()).sum::<usize>()
+    }
 }
 
 /// Eager evaluation into a String for debug structs
