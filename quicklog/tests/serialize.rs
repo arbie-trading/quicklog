@@ -23,6 +23,8 @@ fn main() {
             "s, bs: s=Hello bs=vec: {:?}, str: {}",
             vec![1; 100],
             "The quick brown fox jumps over the lazy dog"
+        )
+    );
 
     // Test Vec serialization
     let vec_i32: Vec<i32> = vec![1, 2, 3, 4, 5];

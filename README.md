@@ -1,8 +1,8 @@
 # quicklog
 
-Ultra-fast single-threaded logging framework with **selective field serialization** and **optimized collection logging**. Achieves **111x performance improvement** over Debug formatting for complex structs, **2-85× faster than cloning** for `Vec<T>`, and almost 200x faster than `tracing` and `delog` for large structs.
+Ultra-fast single-threaded logging framework with **selective field serialization**, **generic type support**, and **optimized collection logging**. Achieves **111x performance improvement** over Debug formatting for complex structs, **2-85× faster than cloning** for `Vec<T>`, and almost 200x faster than `tracing` and `delog` for large structs.
 
-Supports standard logging macros like `trace!`, `debug!`, `info!`, `warn!` and `error!`.
+Supports standard logging macros like `trace!`, `debug!`, `info!`, `warn!` and `error!`. Fully supports generic types with zero runtime overhead.
 
 Flushing is deferred until `flush!()` macro is called.
 
@@ -292,6 +292,53 @@ fn main() {
 }
 ```
 
+### Generic Type Support
+
+`#[derive(SerializeSelective)]` fully supports generic type parameters:
+
+```rust
+use quicklog::SerializeSelective;
+
+// Generic struct with trait bounds
+#[derive(SerializeSelective)]
+pub struct Order<T>
+where
+    T: quicklog::serialize::FixedSizeSerialize<8> + std::fmt::Display,
+{
+    #[serialize] pub id: T,           // Generic type in serialized field
+    #[serialize] pub price: f64,
+    #[serialize] pub size: Option<u64>,
+
+    pub metadata: String,              // Not serialized
+}
+
+// Generic type NOT in serialized fields doesn't need trait bounds
+#[derive(SerializeSelective)]
+pub struct Container<T> {
+    #[serialize] pub count: u64,
+
+    pub data: T,  // Generic, not serialized - no trait bounds needed!
+}
+
+// Works with multiple generic parameters
+#[derive(SerializeSelective)]
+pub struct Trade<I, S>
+where
+    I: quicklog::serialize::FixedSizeSerialize<8> + std::fmt::Display,
+    S: quicklog::serialize::FixedSizeSerialize<4> + std::fmt::Display,
+{
+    #[serialize] pub order_id: I,
+    #[serialize] pub symbol_id: S,
+    #[serialize] pub quantity: u32,
+}
+```
+
+**Key points:**
+- Generic types used in `#[serialize]` fields require `FixedSizeSerialize<N> + Display` bounds
+- Generic types only in non-serialized fields don't need any trait bounds
+- Supports multiple generic parameters, nested generics, and lifetime parameters
+- Zero runtime overhead - standard Rust monomorphization
+
 ### Performance Characteristics
 
 | Approach | Latency | Memory Usage | Use Case |
@@ -440,6 +487,7 @@ Please post your bug reports or feature requests on [Github Issues](https://gith
 - [x] **High-performance selective field serialization** (NEW in 0.2.1)
 - [x] **FixedSizeSerialize trait for custom types** (NEW in 0.2.1)
 - [x] **Vec<T> serialization with 2-85× speedup** (NEW in 0.2.2)
+- [x] **Generic type parameter support for SerializeSelective** (NEW in 0.2.3)
 - [] add single-threaded and multi-threaded variants
 - [] Try to remove nested `lazy_format` in recursion
 - [] Check number of copies of data made in each log line and possibly reduce it

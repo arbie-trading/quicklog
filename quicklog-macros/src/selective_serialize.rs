@@ -60,6 +60,9 @@ pub fn derive_selective_serialize(input: TokenStream) -> TokenStream {
 
     let struct_name = &input.ident;
 
+    // Extract generics from the struct definition
+    let generics = &input.generics;
+
     // Only support structs
     let data_struct = match &input.data {
         Data::Struct(data_struct) => data_struct,
@@ -106,6 +109,13 @@ pub fn derive_selective_serialize(input: TokenStream) -> TokenStream {
         .map(|field| &field.ty)
         .collect();
 
+    // Split generics for impl signature
+    // Note: We cannot add explicit FixedSizeSerialize<N> bounds in the where clause because:
+    // 1. The const N parameter is type-dependent and cannot be expressed generically
+    // 2. The compiler will check the bounds implicitly when the code uses to_le_bytes()
+    // Users must ensure generic types implement FixedSizeSerialize at the call site
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     // Generate encoding logic for each field
     let encode_logic = generate_encode_logic(&field_names, &field_types);
 
@@ -116,7 +126,7 @@ pub fn derive_selective_serialize(input: TokenStream) -> TokenStream {
     let buffer_size_logic = generate_buffer_size_logic(&field_names, &field_types);
 
     let expanded = quote! {
-        impl quicklog::serialize::Serialize for #struct_name {
+        impl #impl_generics quicklog::serialize::Serialize for #struct_name #ty_generics #where_clause {
             fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (quicklog::serialize::Store<'buf>, &'buf mut [u8]) {
                 let total_size = self.buffer_size_required();
                 let (chunk, rest) = write_buf.split_at_mut(total_size);
@@ -253,7 +263,8 @@ fn generate_field_size_calc(field_name: &syn::Ident, field_type: &syn::Type) -> 
         let inner_type = extract_option_inner_type(field_type).unwrap();
         quote! {
             // Option<T> size: 1 byte marker + 0 or BYTE_SIZE
-            total += 1 + self.#field_name.map_or(0, |_| <#inner_type as quicklog::serialize::FixedSizeSerialize<_>>::BYTE_SIZE);
+            // Use as_ref() to avoid moving non-Copy types
+            total += 1 + self.#field_name.as_ref().map_or(0, |_| <#inner_type as quicklog::serialize::FixedSizeSerialize<_>>::BYTE_SIZE);
         }
     } else {
         quote! {
