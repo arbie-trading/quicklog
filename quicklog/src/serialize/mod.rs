@@ -504,6 +504,25 @@ where
     }
 }
 
+/// Blanket implementation of Serialize for &T where T implements Serialize
+/// This allows references to be serialized by delegating to the underlying type
+impl<T> Serialize for &T
+where
+    T: Serialize + ?Sized,
+{
+    fn encode<'buf>(&self, write_buf: &'buf mut [u8]) -> (Store<'buf>, &'buf mut [u8]) {
+        (*self).encode(write_buf)
+    }
+
+    fn decode(read_buf: &[u8]) -> (String, &[u8]) {
+        T::decode(read_buf)
+    }
+
+    fn buffer_size_required(&self) -> usize {
+        (*self).buffer_size_required()
+    }
+}
+
 /// Eager evaluation into a String for debug structs
 pub fn encode_debug<T: std::fmt::Debug>(val: T, write_buf: &mut [u8]) -> (Store, &mut [u8]) {
     let val_string = format!("{:?}", val);

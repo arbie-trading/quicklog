@@ -353,9 +353,21 @@ All primitive types and common collections automatically implement `Serialize`:
 - **Integers**: `u8`, `u16`, `u32`, `u64`, `u128`, `i8`, `i16`, `i32`, `i64`, `i128`, `usize`, `isize`
 - **Floats**: `f32`, `f64`
 - **Strings**: `&str`
+- **References**: `&T` where `T: Serialize` (delegates to the underlying type)
 - **Collections**: `Option<T>`, `Vec<T>` where `T: Serialize`
 
 All primitive types also implement `FixedSizeSerialize` for use with selective serialization.
+
+**Note**: Reference serialization (`&T`) works by delegating to the underlying type's `Serialize` implementation, avoiding unnecessary clones. This also works for nested types like `Option<&T>` and `Vec<&T>`:
+
+```rust
+let value = 12345u64;
+let opt_ref: Option<&u64> = Some(&value);
+info!("optional ref: {}", ^opt_ref);  // Works! Output: Some(12345)
+
+let vec_ref: Vec<&u32> = vec![&100, &200, &300];
+info!("vec of refs: {}", ^vec_ref);  // Works! Output: [100, 200, 300]
+```
 
 ### Available Macros
 

@@ -434,3 +434,55 @@ fn serialize_vec_roundtrip() {
     let expected_size = 8 + (3 * 8); // length + 3 i64s
     assert_eq!(original_i64.buffer_size_required(), expected_size);
 }
+
+#[test]
+fn serialize_reference() {
+    // Test blanket &T implementation
+
+    // &str works
+    let s: &str = "hello";
+    let mut buf = [0u8; 256];
+    let (store, _) = s.encode(&mut buf);
+    assert_eq!(format!("{}", store), "hello");
+
+    // &u64 now works with blanket impl
+    let value: u64 = 12345;
+    let reference: &u64 = &value;
+    let mut buf2 = [0u8; 256];
+    let (store2, _) = reference.encode(&mut buf2);
+    assert_eq!(format!("{}", store2), "12345");
+
+    // &i32 works
+    let int_value: i32 = -999;
+    let int_ref: &i32 = &int_value;
+    let mut buf3 = [0u8; 256];
+    let (store3, _) = int_ref.encode(&mut buf3);
+    assert_eq!(format!("{}", store3), "-999");
+}
+
+#[test]
+fn serialize_option_and_vec_with_references() {
+    // Test Option<&T>
+    let value = 12345u64;
+    let opt_ref: Option<&u64> = Some(&value);
+    
+    let mut buf = [0u8; 256];
+    let (store, _) = opt_ref.encode(&mut buf);
+    assert_eq!(format!("{}", store), "Some(12345)");
+
+    // Test None case
+    let opt_none: Option<&u64> = None;
+    let mut buf2 = [0u8; 256];
+    let (store2, _) = opt_none.encode(&mut buf2);
+    assert_eq!(format!("{}", store2), "None");
+
+    // Test Vec<&T>
+    let v1 = 100u32;
+    let v2 = 200u32;
+    let v3 = 300u32;
+    let vec_ref: Vec<&u32> = vec![&v1, &v2, &v3];
+    
+    let mut buf3 = [0u8; 256];
+    let (store3, _) = vec_ref.encode(&mut buf3);
+    assert_eq!(format!("{}", store3), "[100, 200, 300]");
+}
