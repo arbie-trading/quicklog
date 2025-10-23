@@ -486,3 +486,33 @@ fn serialize_option_and_vec_with_references() {
     let (store3, _) = vec_ref.encode(&mut buf3);
     assert_eq!(format!("{}", store3), "[100, 200, 300]");
 }
+
+#[test]
+fn serialize_mutable_reference() {
+    // Test &mut T with direct method call
+    let mut value: u64 = 12345;
+    let mut_ref: &mut u64 = &mut value;
+
+    let mut buf = [0u8; 256];
+    let (store, _) = mut_ref.encode(&mut buf);
+    assert_eq!(format!("{}", store), "12345");
+
+    // Test that we can still modify after serialization
+    *mut_ref = 99999;
+    assert_eq!(value, 99999);
+
+    // Test trait bound resolution (as used in macros)
+    // This verifies that &mut T properly implements Serialize as a trait bound
+    fn requires_serialize<T: Serialize>(t: T) -> usize {
+        t.buffer_size_required()
+    }
+
+    let mut counter = 100u32;
+    let size = requires_serialize(&mut counter);
+    assert_eq!(size, std::mem::size_of::<u32>());
+
+    // Test &mut Vec<T> specifically (the user's reported case)
+    let mut vec_data: Vec<i32> = vec![1, 2, 3];
+    let size_vec = requires_serialize(&mut vec_data);
+    assert_eq!(size_vec, 8 + 3 * 4); // length + 3 i32s
+}
