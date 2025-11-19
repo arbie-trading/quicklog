@@ -30,10 +30,7 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
         convert_args_to_idents(&args);
 
     let mut fmt_args = args.formatting_args;
-    replace_fields_expr(
-        &mut fmt_args,
-        fmt_arg_idents.iter().cloned(),
-    );
+    replace_fields_expr(&mut fmt_args, fmt_arg_idents.iter().cloned());
 
     let fmt_str = args
         .format_string
@@ -50,6 +47,12 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
         special_fmt_str.push(' ');
     }
     let special_fmt_str = special_fmt_str.trim_end();
+
+    #[cfg(feature = "trace")]
+    println!(
+        "PARENT {:?}",
+        quicklog::__FastraceSpanContext::current_local_parent()
+    );
 
     // Conditionally capture trace context if feature is enabled at compile time
     #[cfg(feature = "trace")]
