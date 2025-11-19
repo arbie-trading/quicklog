@@ -48,17 +48,11 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     }
     let special_fmt_str = special_fmt_str.trim_end();
 
-    #[cfg(feature = "trace")]
-    println!(
-        "PARENT {:?}",
-        quicklog::__FastraceSpanContext::current_local_parent()
-    );
-
     // Conditionally capture trace context if feature is enabled at compile time
     #[cfg(feature = "trace")]
     let trace_capture = quote! {
         let __quicklog_trace_id = {
-            if let Some(ctx) = quicklog::__FastraceSpanContext::current_local_parent() {
+            if let Some(ctx) = fastrace::current_local_parent() {
                 Some(ctx.trace_id.0)
             } else {
                 None
