@@ -55,7 +55,7 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     #[cfg(feature = "trace")]
     let trace_capture = quote! {
         let __quicklog_trace_id = {
-            if let Some(ctx) = fastrace::prelude::SpanContext::current_local_parent() {
+            if let Some(ctx) = quicklog::__FastraceSpanContext::current_local_parent() {
                 Some(ctx.trace_id.0)
             } else {
                 None

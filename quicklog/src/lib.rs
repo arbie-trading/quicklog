@@ -233,6 +233,10 @@ pub mod constants;
 pub use quicklog_macros::{debug, error, info, trace, warn, Serialize, SerializeSelective};
 pub use serialize::FixedSizeSerialize;
 
+/// Re-export fastrace types when trace feature is enabled
+#[cfg(feature = "trace")]
+pub use fastrace::prelude::SpanContext as __FastraceSpanContext;
+
 /// Internal API
 ///
 /// timed log item being stored into logging queue
