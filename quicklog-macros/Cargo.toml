@@ -6,6 +6,9 @@ edition = "2021"
 [lib]
 proc-macro = true
 
+[features]
+trace = []
+
 [dependencies]
 proc-macro2 = "1.0.68"
 quote = "1.0.33"

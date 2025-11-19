@@ -287,6 +287,9 @@ pub struct LogRecord {
     pub line: u32,
     /// Log line captured by using LazyFormat which implements Display trait.
     pub log_line: Box<dyn Display>,
+    /// Trace ID (when trace feature is enabled)
+    #[cfg(feature = "trace")]
+    pub trace_id: Option<u128>,
 }
 
 pub trait PatternFormatter {
@@ -303,6 +306,12 @@ impl QuickLogFormatter {
 
 impl PatternFormatter for QuickLogFormatter {
     fn custom_format(&mut self, time: DateTime<Utc>, object: LogRecord) -> String {
+        #[cfg(feature = "trace")]
+        {
+            if let Some(trace_id) = object.trace_id {
+                return format!("[trace_id={:032x}] [{:?}]{}\n", trace_id, time, object.log_line);
+            }
+        }
         format!("[{:?}]{}\n", time, object.log_line)
     }
 }

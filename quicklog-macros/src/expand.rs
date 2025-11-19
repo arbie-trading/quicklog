@@ -51,6 +51,24 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     }
     let special_fmt_str = special_fmt_str.trim_end();
 
+    // Conditionally capture trace context if feature is enabled
+    let trace_capture = quote! {
+        #[cfg(feature = "trace")]
+        let __quicklog_trace_id = {
+            if let Some(ctx) = fastrace::prelude::SpanContext::current_local_parent() {
+                Some(ctx.trace_id.0)
+            } else {
+                None
+            }
+        };
+    };
+
+    // Conditionally add trace_id field to LogRecord
+    let trace_field = quote! {
+        #[cfg(feature = "trace")]
+        trace_id: __quicklog_trace_id,
+    };
+
     quote! {{
         if quicklog::is_level_enabled!(#level) {
             use quicklog::{Log, make_container, serialize::Serialize};
@@ -60,6 +78,8 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
             const fn serialize_check<T: Serialize>(_: &T) {}
 
             #(#args_traits_check)*
+
+            #trace_capture
 
             #new_idents_declaration
 
@@ -71,7 +91,8 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
                 log_line: make_container!(quicklog::lazy_format::make_lazy_format!(|f| {
                     write!(f, #fmt_str, #fmt_args)?;
                     write!(f, #special_fmt_str, #(#prefixed_field_idents),*)
-                }))
+                })),
+                #trace_field
             };
 
             quicklog::logger().log(log_record)
