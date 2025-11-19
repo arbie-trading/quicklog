@@ -51,9 +51,9 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
     }
     let special_fmt_str = special_fmt_str.trim_end();
 
-    // Conditionally capture trace context if feature is enabled
+    // Conditionally capture trace context if feature is enabled at compile time
+    #[cfg(feature = "trace")]
     let trace_capture = quote! {
-        #[cfg(feature = "trace")]
         let __quicklog_trace_id = {
             if let Some(ctx) = fastrace::prelude::SpanContext::current_local_parent() {
                 Some(ctx.trace_id.0)
@@ -63,11 +63,17 @@ pub(crate) fn expand_parsed(level: Level, mut args: Args) -> TokenStream2 {
         };
     };
 
+    #[cfg(not(feature = "trace"))]
+    let trace_capture = quote! {};
+
     // Conditionally add trace_id field to LogRecord
+    #[cfg(feature = "trace")]
     let trace_field = quote! {
-        #[cfg(feature = "trace")]
         trace_id: __quicklog_trace_id,
     };
+
+    #[cfg(not(feature = "trace"))]
+    let trace_field = quote! {};
 
     quote! {{
         if quicklog::is_level_enabled!(#level) {
